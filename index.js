@@ -287,7 +287,6 @@ app.post("/tip", async (req, res) => {
     creator_received: creatorShare
   });
 });
-
 /* =======================
    RAZORPAY WEBHOOK
 ======================= */
@@ -343,28 +342,4 @@ app.post("/webhook/razorpay", async (req, res) => {
   ]);
 
   res.json({ success: true });
-});
-
-app.post("/login", async (req, res) => {
-  const { email, username } = req.body;
-
-  if (!email || !username) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
-
-  const { data: user } = await supabase
-    .from("users")
-    .select("id, username, role, token_balance")
-    .eq("email", email)
-    .eq("username", username)
-    .single();
-
-  if (!user) {
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  res.json({
-    success: true,
-    user
-  });
 });
