@@ -1,32 +1,78 @@
 require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
+const crypto = require("crypto");
+const http = require("http");
+const { Server } = require("socket.io");
 const { createClient } = require("@supabase/supabase-js");
 
+const PORT = process.env.PORT || 10000;
+
+/* =======================
+   SUPABASE
+======================= */
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+/* =======================
+   EXPRESS APP
+======================= */
 const app = express();
+
 app.use(cors());
+
+// Razorpay webhook needs RAW body
 app.use(
   "/webhook/razorpay",
   express.raw({ type: "application/json" })
 );
+
+// Normal JSON for rest APIs
 app.use(express.json());
+
+/* =======================
+   HTTP + SOCKET.IO
+======================= */
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*"
+  }
+});
+
+io.on("connection", (socket) => {
+  console.log("🔌 Overlay connected");
+
+  socket.on("join_creator", (creatorSlug) => {
+    socket.join(creatorSlug);
+    console.log(`🎥 Joined creator room: ${creatorSlug}`);
+  });
+});
+
+/* =======================
+   SERVER START
+======================= */
+server.listen(PORT, "0.0.0.0", () => {
+  console.log("Server running on port", PORT);
+});
+
+/* =======================
+   ROUTES
+======================= */
 
 app.get("/", (req, res) => {
   res.send("xdtip backend is running");
 });
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
-});
-
 app.get("/test-db", async (req, res) => {
-  const { data, error } = await supabase.from("users").select("*").limit(1);
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .limit(1);
 
   if (error) {
     return res.status(500).json({ error: error.message });
@@ -35,6 +81,9 @@ app.get("/test-db", async (req, res) => {
   res.json({ success: true, data });
 });
 
+/* =======================
+   REGISTER USER
+======================= */
 app.post("/register", async (req, res) => {
   const { email, username, role } = req.body;
 
@@ -46,7 +95,6 @@ app.post("/register", async (req, res) => {
     return res.status(400).json({ error: "Invalid role" });
   }
 
-  // Check if username already exists
   const { data: existingUser } = await supabase
     .from("users")
     .select("id")
@@ -57,8 +105,7 @@ app.post("/register", async (req, res) => {
     return res.status(409).json({ error: "Username already taken" });
   }
 
-  // Insert user
-  const { data, error } = await supabase.from("users").insert([
+  const { error } = await supabase.from("users").insert([
     {
       email,
       username,
@@ -74,8 +121,9 @@ app.post("/register", async (req, res) => {
   res.json({ success: true, message: "User registered" });
 });
 
-const crypto = require("crypto");
-
+/* =======================
+   BECOME CREATOR
+======================= */
 app.post("/become-creator", async (req, res) => {
   const { username } = req.body;
 
@@ -83,14 +131,13 @@ app.post("/become-creator", async (req, res) => {
     return res.status(400).json({ error: "Username is required" });
   }
 
-  // Find user
-  const { data: user, error: userError } = await supabase
+  const { data: user } = await supabase
     .from("users")
     .select("id, role")
     .eq("username", username)
     .single();
 
-  if (userError || !user) {
+  if (!user) {
     return res.status(404).json({ error: "User not found" });
   }
 
@@ -98,10 +145,8 @@ app.post("/become-creator", async (req, res) => {
     return res.status(400).json({ error: "User is already a creator" });
   }
 
-  // Generate overlay key
   const overlayKey = crypto.randomBytes(16).toString("hex");
 
-  // Create creator profile
   const { error: creatorError } = await supabase.from("creators").insert([
     {
       user_id: user.id,
@@ -115,7 +160,6 @@ app.post("/become-creator", async (req, res) => {
     return res.status(500).json({ error: creatorError.message });
   }
 
-  // Update user role
   await supabase
     .from("users")
     .update({ role: "creator" })
@@ -123,11 +167,14 @@ app.post("/become-creator", async (req, res) => {
 
   res.json({
     success: true,
-    message: "User is now a creator",
-    creator_url: `tip.xdfun/${username}`
+    creator_url: `tip.xdfun/${username}`,
+    overlay_key: overlayKey
   });
 });
 
+/* =======================
+   SEND TIP
+======================= */
 app.post("/tip", async (req, res) => {
   const { from_username, to_creator, amount, message } = req.body;
 
@@ -139,22 +186,16 @@ app.post("/tip", async (req, res) => {
     return res.status(400).json({ error: "Minimum tip is 10 tokens" });
   }
 
-  // Get viewer
   const { data: viewer } = await supabase
     .from("users")
     .select("id, token_balance")
     .eq("username", from_username)
     .single();
 
-  if (!viewer) {
-    return res.status(404).json({ error: "Viewer not found" });
-  }
-
-  if (viewer.token_balance < amount) {
+  if (!viewer || viewer.token_balance < amount) {
     return res.status(400).json({ error: "Insufficient tokens" });
   }
 
-  // Get creator
   const { data: creator } = await supabase
     .from("creators")
     .select("id, payout_balance")
@@ -168,19 +209,16 @@ app.post("/tip", async (req, res) => {
   const creatorShare = Math.floor(amount * 0.92);
   const platformShare = amount - creatorShare;
 
-  // Deduct viewer tokens
   await supabase
     .from("users")
     .update({ token_balance: viewer.token_balance - amount })
     .eq("id", viewer.id);
 
-  // Add to creator balance
   await supabase
     .from("creators")
     .update({ payout_balance: creator.payout_balance + creatorShare })
     .eq("id", creator.id);
 
-  // Add to platform wallet
   const { data: wallet } = await supabase
     .from("platform_wallet")
     .select("balance")
@@ -192,7 +230,6 @@ app.post("/tip", async (req, res) => {
     .update({ balance: wallet.balance + platformShare })
     .eq("id", 1);
 
-  // Save tip
   await supabase.from("tips").insert([
     {
       viewer_id: viewer.id,
@@ -202,51 +239,55 @@ app.post("/tip", async (req, res) => {
     }
   ]);
 
-  // Log transactions
   await supabase.from("transactions").insert([
     { user_id: viewer.id, type: "tip_sent", amount },
     { user_id: creator.id, type: "tip_received", amount: creatorShare },
     { type: "platform_fee", amount: platformShare }
   ]);
 
+  /* 🔥 REAL-TIME EVENT */
+  io.to(to_creator).emit("new_tip", {
+    username: from_username,
+    amount,
+    message
+  });
+
   res.json({
     success: true,
-    message: "Tip sent successfully",
     creator_received: creatorShare
   });
 });
 
+/* =======================
+   RAZORPAY WEBHOOK
+======================= */
 app.post("/webhook/razorpay", async (req, res) => {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
   const signature = req.headers["x-razorpay-signature"];
-  const body = req.body;
 
   const expectedSignature = crypto
     .createHmac("sha256", secret)
-    .update(body)
+    .update(req.body)
     .digest("hex");
 
   if (signature !== expectedSignature) {
     return res.status(400).json({ error: "Invalid signature" });
   }
 
-  const event = JSON.parse(body.toString());
+  const event = JSON.parse(req.body.toString());
 
   if (event.event !== "payment.captured") {
     return res.json({ status: "ignored" });
   }
 
   const payment = event.payload.payment.entity;
-
-  const amountInRupees = payment.amount / 100;
+  const amount = payment.amount / 100;
   const username = payment.notes?.username;
 
   if (!username) {
-    return res.status(400).json({ error: "Username missing in payment" });
+    return res.status(400).json({ error: "Username missing" });
   }
 
-  // Find user
   const { data: user } = await supabase
     .from("users")
     .select("id, token_balance")
@@ -257,26 +298,19 @@ app.post("/webhook/razorpay", async (req, res) => {
     return res.status(404).json({ error: "User not found" });
   }
 
-  // Add tokens
   await supabase
     .from("users")
-    .update({
-      token_balance: user.token_balance + amountInRupees
-    })
+    .update({ token_balance: user.token_balance + amount })
     .eq("id", user.id);
 
-  // Log transaction
   await supabase.from("transactions").insert([
     {
       user_id: user.id,
       type: "purchase",
-      amount: amountInRupees,
+      amount,
       reference_id: payment.id
     }
   ]);
 
   res.json({ success: true });
 });
-
-
-
