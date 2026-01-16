@@ -374,3 +374,35 @@ app.post("/webhook/razorpay", async (req, res) => {
 
   res.json({ success: true });
 });
+
+/* =======================
+     TIP HISTORY
+======================= */
+app.get("/creator-tips/:username", async (req, res) => {
+  const { username } = req.params;
+
+  // Find creator
+  const { data: creator, error: creatorError } = await supabase
+    .from("creators")
+    .select("id")
+    .eq("slug", username)
+    .single();
+
+  if (creatorError || !creator) {
+    return res.status(404).json({ error: "Creator not found" });
+  }
+
+  // Get tips
+  const { data: tips, error } = await supabase
+    .from("tips")
+    .select("amount, message, created_at")
+    .eq("creator_id", creator.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({ success: true, tips });
+});
+
