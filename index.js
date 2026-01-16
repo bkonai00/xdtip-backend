@@ -311,8 +311,7 @@ app.post("/webhook/razorpay", async (req, res) => {
       reference_id: payment.id
     }
   ]);
-
-   app.post("/login", async (req, res) => {
+app.post("/login", async (req, res) => {
   const { email, username } = req.body;
 
   if (!email || !username) {
@@ -330,12 +329,5 @@ app.post("/webhook/razorpay", async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
-  res.json({
-    success: true,
-    user
-  });
-});
-
-
-  res.json({ success: true });
+  res.json({ success: true, user });
 });
