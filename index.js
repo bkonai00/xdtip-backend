@@ -95,30 +95,61 @@ app.post("/register", async (req, res) => {
     return res.status(400).json({ error: "Invalid role" });
   }
 
-  const { data: existingUser } = await supabase
+  // Check if username exists
+  const { data: existing } = await supabase
     .from("users")
     .select("id")
     .eq("username", username)
     .single();
 
-  if (existingUser) {
+  if (existing) {
     return res.status(409).json({ error: "Username already taken" });
   }
 
-  const { error } = await supabase.from("users").insert([
-    {
-      email,
-      username,
-      role,
-      token_balance: 0
-    }
-  ]);
+  // Create user
+  const { data: user, error } = await supabase
+    .from("users")
+    .insert([
+      {
+        email,
+        username,
+        role,
+        token_balance: 0
+      }
+    ])
+    .select()
+    .single();
 
   if (error) {
     return res.status(500).json({ error: error.message });
   }
 
-  res.json({ success: true, message: "User registered" });
+  // 🔥 AUTO CREATE CREATOR PROFILE
+  if (role === "creator") {
+    const overlayKey = crypto.randomBytes(16).toString("hex");
+
+    const { error: creatorError } = await supabase
+      .from("creators")
+      .insert([
+        {
+          user_id: user.id,
+          slug: username,
+          payout_balance: 0,
+          overlay_key: overlayKey
+        }
+      ]);
+
+    if (creatorError) {
+      return res.status(500).json({
+        error: "User created but creator profile failed"
+      });
+    }
+  }
+
+  res.json({
+    success: true,
+    message: "User registered successfully"
+  });
 });
 
 /* =======================
