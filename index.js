@@ -122,6 +122,36 @@ app.post("/register", async (req, res) => {
 });
 
 /* =======================
+          LOGIN
+======================= */
+
+app.post("/login", async (req, res) => {
+  const { email, username } = req.body;
+
+  if (!email || !username) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("id, email, username, role, token_balance")
+    .eq("email", email)
+    .eq("username", username)
+    .single();
+
+  if (error || !user) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  res.json({
+    success: true,
+    user
+  });
+});
+
+
+
+/* =======================
    BECOME CREATOR
 ======================= */
 app.post("/become-creator", async (req, res) => {
@@ -311,23 +341,3 @@ app.post("/webhook/razorpay", async (req, res) => {
       reference_id: payment.id
     }
   ]);
-app.post("/login", async (req, res) => {
-  const { email, username } = req.body;
-
-  if (!email || !username) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
-
-  const { data: user } = await supabase
-    .from("users")
-    .select("id, username, role, token_balance")
-    .eq("email", email)
-    .eq("username", username)
-    .single();
-
-  if (!user) {
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  res.json({ success: true, user });
-});
