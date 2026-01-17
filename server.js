@@ -303,9 +303,7 @@ app.get('/withdrawals', authenticateToken, async (req, res) => {
     }
 });
 
-// ==========================================
-// L. WEBHOOK PAYMENT (Username Edition)
-// ==========================================
+// L. WEBHOOK PAYMENT (Updated to Save Transaction History)
 app.post('/webhook', async (req, res) => {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
@@ -321,9 +319,9 @@ app.post('/webhook', async (req, res) => {
         if (event === 'payment.captured') {
             const payment = req.body.payload.payment.entity;
             const amount = payment.amount / 100; // Convert Paise -> Rupee
+            const paymentId = payment.id;
             
             // LOOK FOR USERNAME IN NOTES
-            // 'username' must match the field name you created in Razorpay Dashboard
             let targetUser = payment.notes.username || payment.notes.Username;
 
             console.log(`💰 Payment: ${amount} tokens. Target User: ${targetUser}`);
@@ -339,8 +337,19 @@ app.post('/webhook', async (req, res) => {
                     .from('users').select('id').eq('username', targetUser).single();
 
                 if (user) {
+                    // A. Add Balance
                     await supabase.rpc('increment_balance', { user_id: user.id, amount: amount });
-                    console.log(`✅ Success! Added ${amount} tokens to ${targetUser}`);
+                    
+                    // B. ✅ SAVE TRANSACTION RECORD (The Missing Part)
+                    await supabase.from('transactions').insert([{
+                        user_id: user.id,
+                        amount: amount,
+                        payment_id: paymentId,
+                        type: 'deposit',
+                        status: 'success'
+                    }]);
+
+                    console.log(`✅ Success! Added ${amount} tokens & saved history for ${targetUser}`);
                 } else {
                     console.log(`❌ User '${targetUser}' does not exist.`);
                 }
@@ -350,15 +359,6 @@ app.post('/webhook', async (req, res) => {
     } else {
         res.status(400).send('Invalid signature');
     }
-});
-
-// ------------------------------------------
-// START SERVER
-// ------------------------------------------
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-
 });
 
 
