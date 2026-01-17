@@ -131,41 +131,53 @@
 
         // --- TTS FUNCTION (HINDI / HINGLISH SUPPORT) ---
         function speakText(text, callback) {
-            if (!window.speechSynthesis) return callback();
+            if (!window.speechSynthesis) {
+                console.error("Browser does not support TTS");
+                return callback();
+            }
+
+            // Cancel any currently playing audio
+            window.speechSynthesis.cancel();
 
             const utterance = new SpeechSynthesisUtterance(text);
-            
-            // Get voices again just in case
             const voices = window.speechSynthesis.getVoices();
 
-            // 🎯 PRIORITY 1: Look for Hindi (India)
-            // Common names: "Google Hindi", "Microsoft Hemant", "Lekha"
-            let targetVoice = voices.find(v => v.lang.includes('hi-IN') || v.lang.includes('hi_IN'));
-
-            // 🎯 PRIORITY 2: If no Hindi, fallback to any English
-            if (!targetVoice) {
-                targetVoice = voices.find(v => v.lang.includes('en'));
-            }
+            // 🎯 NEW PRIORITY FOR HINGLISH:
+            // 1. English (India) -> Best for "Kya haal hai bro"
+            // 2. Hindi (India)   -> Backup
+            // 3. Generic English -> Final Backup
+            let targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
+                              voices.find(v => v.lang.includes('hi-IN')) || 
+                              voices.find(v => v.lang.includes('en'));
 
             if (targetVoice) {
-                console.log("Speaking using voice:", targetVoice.name);
+                console.log("🗣️ Speaking with:", targetVoice.name);
                 utterance.voice = targetVoice;
                 
-                // If using Hindi voice, slow it down slightly for clarity
-                if(targetVoice.lang.includes('hi')) {
-                    utterance.rate = 0.9; 
-                }
+                // Tweak these for better Hinglish flow
+                utterance.rate = 1.0;  // Normal speed (0.9 was too slow for English voice)
+                utterance.pitch = 1.0; // Normal pitch
+            } else {
+                console.log("⚠️ No specific voice found, using default.");
             }
 
-            utterance.volume = 1;
-            utterance.pitch = 1;
-
+            // Handle End
             utterance.onend = function() {
                 callback();
             };
+
+            // Handle Errors
+            utterance.onerror = function(e) {
+                console.error("TTS Error:", e);
+                callback();
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
 
             window.speechSynthesis.speak(utterance);
         }
     </script>
 </body>
 </html>
+
