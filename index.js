@@ -9,7 +9,7 @@ const { createClient } = require("@supabase/supabase-js");
 const app = express();
 
 /* =======================
-   CORS (IMPORTANT)
+   CORS
 ======================= */
 app.use(
   cors({
@@ -22,6 +22,8 @@ app.use(
     allowedHeaders: ["Content-Type", "x-user"]
   })
 );
+
+app.options("*", cors());
 
 /* =======================
    BODY PARSERS
@@ -47,17 +49,17 @@ const supabase = createClient(
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    origin: "*"
-  }
+  cors: { origin: "*" }
 });
 
 io.on("connection", (socket) => {
   console.log("🔌 Socket connected:", socket.id);
 
   socket.on("join_creator", (creatorSlug) => {
-    socket.join(creatorSlug);
-    console.log("🎥 Joined creator room:", creatorSlug);
+    if (creatorSlug) {
+      socket.join(creatorSlug);
+      console.log("🎥 Joined creator room:", creatorSlug);
+    }
   });
 
   socket.on("disconnect", () => {
@@ -82,21 +84,8 @@ app.get("/", (req, res) => {
   res.send("xdtip backend is running");
 });
 
-app.get("/test-db", async (req, res) => {
-  const { data, error } = await supabase
-    .from("users")
-    .select("*")
-    .limit(1);
-
-  if (error) {
-    return res.status(500).json({ error: error.message });
-  }
-
-  res.json({ success: true, data });
-});
-
 /* =======================
-   REGISTER USER
+   REGISTER
 ======================= */
 app.post("/register", async (req, res) => {
   const { email, username, role } = req.body;
@@ -109,7 +98,6 @@ app.post("/register", async (req, res) => {
     return res.status(400).json({ error: "Invalid role" });
   }
 
-  // Check if username exists
   const { data: existing } = await supabase
     .from("users")
     .select("id")
@@ -120,16 +108,10 @@ app.post("/register", async (req, res) => {
     return res.status(409).json({ error: "Username already taken" });
   }
 
-  // Create user
   const { data: user, error } = await supabase
     .from("users")
     .insert([
-      {
-        email,
-        username,
-        role,
-        token_balance: 0
-      }
+      { email, username, role, token_balance: 0 }
     ])
     .select()
     .single();
@@ -138,38 +120,25 @@ app.post("/register", async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 
-  // 🔥 AUTO CREATE CREATOR PROFILE
   if (role === "creator") {
     const overlayKey = crypto.randomBytes(16).toString("hex");
 
-    const { error: creatorError } = await supabase
-      .from("creators")
-      .insert([
-        {
-          user_id: user.id,
-          slug: username,
-          payout_balance: 0,
-          overlay_key: overlayKey
-        }
-      ]);
-
-    if (creatorError) {
-      return res.status(500).json({
-        error: "User created but creator profile failed"
-      });
-    }
+    await supabase.from("creators").insert([
+      {
+        user_id: user.id,
+        slug: username,
+        payout_balance: 0,
+        overlay_key: overlayKey
+      }
+    ]);
   }
 
-  res.json({
-    success: true,
-    message: "User registered successfully"
-  });
+  res.json({ success: true });
 });
 
 /* =======================
-          LOGIN
+   LOGIN (MVP)
 ======================= */
-
 app.post("/login", async (req, res) => {
   const { email, username } = req.body;
 
@@ -177,93 +146,33 @@ app.post("/login", async (req, res) => {
     return res.status(400).json({ error: "Missing fields" });
   }
 
-  const { data: user, error } = await supabase
+  const { data: user } = await supabase
     .from("users")
     .select("id, email, username, role, token_balance")
     .eq("email", email)
     .eq("username", username)
     .single();
 
-  if (error || !user) {
+  if (!user) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
-  res.json({
-    success: true,
-    user
-  });
-});
-
-
-
-/* =======================
-   BECOME CREATOR
-======================= */
-app.post("/become-creator", async (req, res) => {
-  const { username } = req.body;
-
-  if (!username) {
-    return res.status(400).json({ error: "Username is required" });
-  }
-
-  const { data: user } = await supabase
-    .from("users")
-    .select("id, role")
-    .eq("username", username)
-    .single();
-
-  if (!user) {
-    return res.status(404).json({ error: "User not found" });
-  }
-
-  if (user.role === "creator") {
-    return res.status(400).json({ error: "User is already a creator" });
-  }
-
-  const overlayKey = crypto.randomBytes(16).toString("hex");
-
-  const { error: creatorError } = await supabase.from("creators").insert([
-    {
-      user_id: user.id,
-      slug: username,
-      payout_balance: 0,
-      overlay_key: overlayKey
-    }
-  ]);
-
-  if (creatorError) {
-    return res.status(500).json({ error: creatorError.message });
-  }
-
-  await supabase
-    .from("users")
-    .update({ role: "creator" })
-    .eq("id", user.id);
-
-  res.json({
-    success: true,
-    creator_url: `tip.xdfun/${username}`,
-    overlay_key: overlayKey
-  });
+  res.json({ success: true, user });
 });
 
 /* =======================
-   SEND TIP
+   SEND TIP (LOGIN REQUIRED)
 ======================= */
 app.post("/tip", async (req, res) => {
+  const viewerUsername = req.headers["x-user"];
   const { to_creator, amount, message } = req.body;
-const viewerUsername = req.headers["x-user"];
 
-if (!viewerUsername) {
-  return res.status(401).json({ error: "Please login first" });
-}
-
-  if (!from_username || !to_creator || !amount) {
-    return res.status(400).json({ error: "Missing required fields" });
+  if (!viewerUsername) {
+    return res.status(401).json({ error: "Please login first" });
   }
 
-  if (amount < 10) {
-    return res.status(400).json({ error: "Minimum tip is 10 tokens" });
+  if (!to_creator || !amount || amount < 10) {
+    return res.status(400).json({ error: "Invalid tip" });
   }
 
   const { data: viewer } = await supabase
@@ -299,17 +208,6 @@ if (!viewerUsername) {
     .update({ payout_balance: creator.payout_balance + creatorShare })
     .eq("id", creator.id);
 
-  const { data: wallet } = await supabase
-    .from("platform_wallet")
-    .select("balance")
-    .eq("id", 1)
-    .single();
-
-  await supabase
-    .from("platform_wallet")
-    .update({ balance: wallet.balance + platformShare })
-    .eq("id", 1);
-
   await supabase.from("tips").insert([
     {
       viewer_id: viewer.id,
@@ -319,24 +217,40 @@ if (!viewerUsername) {
     }
   ]);
 
-  await supabase.from("transactions").insert([
-    { user_id: viewer.id, type: "tip_sent", amount },
-    { user_id: creator.id, type: "tip_received", amount: creatorShare },
-    { type: "platform_fee", amount: platformShare }
-  ]);
-
-  /* 🔥 REAL-TIME EVENT */
-  io.to(to_creator).emit("new_tip", {
-    username: from_username,
+  io.to(to_creator).emit("new-tip", {
+    from: viewerUsername,
     amount,
     message
   });
 
-  res.json({
-    success: true,
-    creator_received: creatorShare
-  });
+  res.json({ success: true });
 });
+
+/* =======================
+   CREATOR TIP HISTORY
+======================= */
+app.get("/creator-tips/:username", async (req, res) => {
+  const { username } = req.params;
+
+  const { data: creator } = await supabase
+    .from("creators")
+    .select("id")
+    .eq("slug", username)
+    .single();
+
+  if (!creator) {
+    return res.status(404).json({ error: "Creator not found" });
+  }
+
+  const { data: tips } = await supabase
+    .from("tips")
+    .select("amount, message, created_at")
+    .eq("creator_id", creator.id)
+    .order("created_at", { ascending: false });
+
+  res.json({ success: true, tips });
+});
+
 /* =======================
    RAZORPAY WEBHOOK
 ======================= */
@@ -344,12 +258,12 @@ app.post("/webhook/razorpay", async (req, res) => {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
   const signature = req.headers["x-razorpay-signature"];
 
-  const expectedSignature = crypto
+  const expected = crypto
     .createHmac("sha256", secret)
     .update(req.body)
     .digest("hex");
 
-  if (signature !== expectedSignature) {
+  if (signature !== expected) {
     return res.status(400).json({ error: "Invalid signature" });
   }
 
@@ -364,7 +278,7 @@ app.post("/webhook/razorpay", async (req, res) => {
   const username = payment.notes?.username;
 
   if (!username) {
-    return res.status(400).json({ error: "Username missing" });
+    return res.json({ success: true });
   }
 
   const { data: user } = await supabase
@@ -374,7 +288,7 @@ app.post("/webhook/razorpay", async (req, res) => {
     .single();
 
   if (!user) {
-    return res.status(404).json({ error: "User not found" });
+    return res.json({ success: true });
   }
 
   await supabase
@@ -382,46 +296,5 @@ app.post("/webhook/razorpay", async (req, res) => {
     .update({ token_balance: user.token_balance + amount })
     .eq("id", user.id);
 
-  await supabase.from("transactions").insert([
-    {
-      user_id: user.id,
-      type: "purchase",
-      amount,
-      reference_id: payment.id
-    }
-  ]);
-
   res.json({ success: true });
 });
-
-/* =======================
-     TIP HISTORY
-======================= */
-app.get("/creator-tips/:username", async (req, res) => {
-  const { username } = req.params;
-
-  // Find creator
-  const { data: creator, error: creatorError } = await supabase
-    .from("creators")
-    .select("id")
-    .eq("slug", username)
-    .single();
-
-  if (creatorError || !creator) {
-    return res.status(404).json({ error: "Creator not found" });
-  }
-
-  // Get tips
-  const { data: tips, error } = await supabase
-    .from("tips")
-    .select("amount, message, created_at")
-    .eq("creator_id", creator.id)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    return res.status(500).json({ error: error.message });
-  }
-
-  res.json({ success: true, tips });
-});
-
