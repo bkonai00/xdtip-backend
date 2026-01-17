@@ -2,83 +2,152 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>xdtip Overlay</title>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <style>
-        /* Transparent Background */
-        body { margin: 0; padding: 0; overflow: hidden; background: transparent; font-family: 'Arial', sans-serif; }
-        
-        /* The Alert Box */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@800&display=swap');
+
+        body { 
+            margin: 0; padding: 0; overflow: hidden; 
+            background: transparent; /* Transparent for OBS */
+            font-family: 'Inter', sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh;
+        }
+
         #alert-box {
-            display: none; 
-            position: absolute;
-            top: 50px; left: 50px;
-            background: rgba(0, 0, 0, 0.9);
-            border-left: 8px solid #ff3b3b;
-            padding: 20px;
-            border-radius: 8px;
-            width: 400px;
+            text-align: center;
+            opacity: 0; /* Hidden by default */
+            transform: translateY(50px);
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #alert-box.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .alert-image {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: 5px solid #ff3b3b;
+            box-shadow: 0 0 30px rgba(255, 59, 59, 0.6);
+            object-fit: cover;
+            margin-bottom: 15px;
+            animation: pulse 2s infinite;
+        }
+
+        .alert-text {
+            font-size: 48px;
             color: white;
-            box-shadow: 0 0 20px rgba(255, 59, 59, 0.5);
-            animation: slideIn 0.5s ease-out;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.8);
+            margin: 0;
         }
 
-        @keyframes slideIn {
-            from { transform: translateX(-100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        .highlight { color: #ff3b3b; }
+
+        .message {
+            font-size: 28px;
+            color: #ddd;
+            margin-top: 10px;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            max-width: 600px;
         }
 
-        h1 { margin: 0; font-size: 24px; color: #ff3b3b; text-transform: uppercase; }
-        h2 { margin: 5px 0 0 0; font-size: 18px; font-weight: normal; }
-        p { margin: 10px 0 0 0; font-style: italic; color: #ddd; font-size: 20px; }
-        .highlight { font-weight: bold; color: white; }
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 59, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(255, 59, 59, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 59, 0); }
+        }
     </style>
 </head>
 <body>
 
     <div id="alert-box">
-        <h1>New Tip!</h1>
-        <h2 id="alert-text">User sent 100 Tokens</h2>
-        <p id="alert-message">"This is an amazing stream!"</p>
+        <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMjR4ZGV4ZGV4ZGV4ZGV4ZGV4ZGV4ZGV4ZGV4ZGV4ZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/LdOyjZ7io5Msw/giphy.gif" class="alert-image">
+        
+        <h1 class="alert-text"><span id="sender" class="highlight">Someone</span> sent <span id="amount">100</span>!</h1>
+        
+        <p class="message" id="message-text">This is an amazing message!</p>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
-        const pathParts = window.location.pathname.split('/');
-        const obsToken = pathParts[pathParts.length - 1]; 
+        // --- CONFIGURATION ---
+        const socket = io(); // Connects to Render Backend automatically
+        const queue = [];    // Alert Queue
+        let isPlaying = false;
 
-        socket.emit('join-overlay', obsToken);
+        // 1. Join Room (Get token from URL)
+        const token = window.location.pathname.split('/').pop();
+        if(token) {
+            console.log("Joining Overlay for token:", token);
+            socket.emit('join-overlay', token);
+        }
 
+        // 2. Listen for Tips
         socket.on('new-tip', (data) => {
-            playAlert(data);
+            console.log("New Tip Received:", data);
+            queue.push(data);
+            processQueue();
         });
 
-        function playAlert(data) {
+        // 3. Process the Queue (One by one)
+        function processQueue() {
+            if (isPlaying || queue.length === 0) return;
+
+            isPlaying = true;
+            const data = queue.shift();
+            showAlert(data);
+        }
+
+        // 4. Show Visuals & Play TTS
+        function showAlert(data) {
+            // A. Update HTML
+            document.getElementById('sender').innerText = data.sender;
+            document.getElementById('amount').innerText = data.amount;
+            document.getElementById('message-text').innerText = data.message;
+
+            // B. Animate In
             const box = document.getElementById('alert-box');
-            const text = document.getElementById('alert-text');
-            const msg = document.getElementById('alert-message');
+            box.classList.add('show');
 
-            // 1. Update Text
-            text.innerHTML = `<span class="highlight">${data.sender}</span> sent <span class="highlight">${data.amount}</span> Tokens`;
-            msg.innerText = `"${data.message}"`;
+            // C. TTS (Speech Logic)
+            speakText(`${data.sender} sent ${data.amount} tokens. ${data.message}`, () => {
+                // This runs AFTER speaking finishes
+                setTimeout(() => {
+                    box.classList.remove('show'); // Animate Out
+                    
+                    setTimeout(() => {
+                        isPlaying = false;
+                        processQueue(); // Check for next alert
+                    }, 1000); // Wait for fade out
+                }, 2000); // Wait 2 seconds after speaking
+            });
+        }
 
-            // 2. Show Box
-            box.style.display = 'block';
+        // --- TTS FUNCTION ---
+        function speakText(text, callback) {
+            if (!window.speechSynthesis) return callback(); // Browser doesn't support TTS
 
-            // 3. Play Audio
-            // (OBS Browser Source allows autoplay by default)
-            window.speechSynthesis.cancel(); 
-            const sentence = `${data.sender} sent ${data.amount} tokens. ${data.message}`;
-            const utterance = new SpeechSynthesisUtterance(sentence);
-            utterance.rate = 1;
+            const utterance = new SpeechSynthesisUtterance(text);
             
-            window.speechSynthesis.speak(utterance);
+            // Voice Settings
+            utterance.volume = 1; // 0 to 1
+            utterance.rate = 1;   // Speed
+            utterance.pitch = 1;  // Voice tone
 
-            // 4. Hide after 6 seconds
-            setTimeout(() => {
-                box.style.display = 'none';
-            }, 6000);
+            // Optional: Pick a specific voice (English)
+            const voices = window.speechSynthesis.getVoices();
+            const englishVoice = voices.find(v => v.lang.includes('en'));
+            if(englishVoice) utterance.voice = englishVoice;
+
+            // When done speaking
+            utterance.onend = function() {
+                callback();
+            };
+
+            window.speechSynthesis.speak(utterance);
         }
     </script>
 </body>
