@@ -61,61 +61,76 @@
         }
 
         function showAlert(data) {
-            document.getElementById('sender').innerText = data.sender;
-            document.getElementById('amount').innerText = data.amount;
-            document.getElementById('message-text').innerText = data.message;
-            
+            // ... visual update code ...
+
             const box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            speakText(`${data.sender} sent ${data.amount} tokens. ${data.message}`, () => {
-                setTimeout(() => { box.classList.remove('show'); setTimeout(() => { isPlaying = false; processQueue(); }, 1000); }, 2000);
+            // ✅ COMBINE THEM CLEARLY
+            // We use a "comma" instead of a period for a more natural pause
+            const fullText = `${data.sender} sent ${data.amount} tokens, says: ${data.message}`;
+
+            speakText(fullText, () => {
+                setTimeout(() => {
+                    box.classList.remove('show'); 
+                    setTimeout(() => {
+                        isPlaying = false;
+                        processQueue(); 
+                    }, 1000); 
+                }, 2000); 
             });
         }
+        // --- GLOBAL VARIABLES (To prevent audio cutting off) ---
+        const socket = io(); 
+        const queue = [];    
+        let isPlaying = false;
+        let currentUtterance = null; // ✅ GLOBAL VARIABLE (Fixes the bug)
 
+        // ... (Keep your loadVoices and other logic same) ...
+
+        // --- UPDATED TTS FUNCTION ---
         function speakText(text, callback) {
             if (!window.speechSynthesis) {
-                console.error("Browser does not support TTS");
+                console.error("No TTS Support");
                 return callback();
             }
 
-            // Cancel any currently playing audio
+            // Cancel old audio
             window.speechSynthesis.cancel();
 
-            const utterance = new SpeechSynthesisUtterance(text);
+            // ✅ ASSIGN TO GLOBAL VARIABLE
+            currentUtterance = new SpeechSynthesisUtterance(text);
+            
             const voices = window.speechSynthesis.getVoices();
-
-            // 🎯 NEW PRIORITY FOR HINGLISH:
-            // 1. English (India) -> Best for "Kya haal hai bro"
-            // 2. Hindi (India)   -> Backup
-            // 3. Generic English -> Final Backup
+            
+            // 1. English (India) - Best for Hinglish
+            // 2. Hindi (India)
+            // 3. Any English
             let targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
                               voices.find(v => v.lang.includes('hi-IN')) || 
                               voices.find(v => v.lang.includes('en'));
 
             if (targetVoice) {
-                console.log("🗣️ Speaking with:", targetVoice.name);
-                utterance.voice = targetVoice;
-                
-                // Tweak these for better Hinglish flow
-                utterance.rate = 1.0;  // Normal speed (0.9 was too slow for English voice)
-                utterance.pitch = 1.0; // Normal pitch
-            } else {
-                console.log("⚠️ No specific voice found, using default.");
+                currentUtterance.voice = targetVoice;
+                currentUtterance.rate = 1.0; 
+                currentUtterance.pitch = 1.0;
             }
 
-            // Handle End
-            utterance.onend = function() {
+            // ✅ DEBUGGING: Print what it is trying to say
+            console.log("🗣️ Speaking:", text);
+
+            currentUtterance.onend = function() {
+                currentUtterance = null; // Clean up after finishing
                 callback();
             };
 
-            // Handle Errors
-            utterance.onerror = function(e) {
+            currentUtterance.onerror = function(e) {
                 console.error("TTS Error:", e);
+                currentUtterance = null;
                 callback();
             };
 
-            window.speechSynthesis.speak(utterance);
+            window.speechSynthesis.speak(currentUtterance);
         }
     </script>
 </body>
