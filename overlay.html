@@ -74,11 +74,18 @@
 
     <script>
         // --- CONFIGURATION ---
-        const socket = io(); // Connects to Render Backend automatically
-        const queue = [];    // Alert Queue
+        const socket = io(); 
+        const queue = [];    
         let isPlaying = false;
+        let availableVoices = [];
 
-        // 1. Join Room (Get token from URL)
+        // Load voices immediately so they are ready
+        window.speechSynthesis.onvoiceschanged = () => {
+            availableVoices = window.speechSynthesis.getVoices();
+            console.log("Voices loaded:", availableVoices.length);
+        };
+
+        // 1. Join Room
         const token = window.location.pathname.split('/').pop();
         if(token) {
             console.log("Joining Overlay for token:", token);
@@ -92,7 +99,7 @@
             processQueue();
         });
 
-        // 3. Process the Queue (One by one)
+        // 3. Process Queue
         function processQueue() {
             if (isPlaying || queue.length === 0) return;
 
@@ -103,46 +110,56 @@
 
         // 4. Show Visuals & Play TTS
         function showAlert(data) {
-            // A. Update HTML
             document.getElementById('sender').innerText = data.sender;
             document.getElementById('amount').innerText = data.amount;
             document.getElementById('message-text').innerText = data.message;
 
-            // B. Animate In
             const box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // C. TTS (Speech Logic)
+            // Speak: "Sender sent Amount. Message"
             speakText(`${data.sender} sent ${data.amount} tokens. ${data.message}`, () => {
-                // This runs AFTER speaking finishes
                 setTimeout(() => {
-                    box.classList.remove('show'); // Animate Out
-                    
+                    box.classList.remove('show'); 
                     setTimeout(() => {
                         isPlaying = false;
-                        processQueue(); // Check for next alert
-                    }, 1000); // Wait for fade out
-                }, 2000); // Wait 2 seconds after speaking
+                        processQueue(); 
+                    }, 1000); 
+                }, 2000); 
             });
         }
 
-        // --- TTS FUNCTION ---
+        // --- TTS FUNCTION (HINDI / HINGLISH SUPPORT) ---
         function speakText(text, callback) {
-            if (!window.speechSynthesis) return callback(); // Browser doesn't support TTS
+            if (!window.speechSynthesis) return callback();
 
             const utterance = new SpeechSynthesisUtterance(text);
             
-            // Voice Settings
-            utterance.volume = 1; // 0 to 1
-            utterance.rate = 1;   // Speed
-            utterance.pitch = 1;  // Voice tone
-
-            // Optional: Pick a specific voice (English)
+            // Get voices again just in case
             const voices = window.speechSynthesis.getVoices();
-            const englishVoice = voices.find(v => v.lang.includes('en'));
-            if(englishVoice) utterance.voice = englishVoice;
 
-            // When done speaking
+            // 🎯 PRIORITY 1: Look for Hindi (India)
+            // Common names: "Google Hindi", "Microsoft Hemant", "Lekha"
+            let targetVoice = voices.find(v => v.lang.includes('hi-IN') || v.lang.includes('hi_IN'));
+
+            // 🎯 PRIORITY 2: If no Hindi, fallback to any English
+            if (!targetVoice) {
+                targetVoice = voices.find(v => v.lang.includes('en'));
+            }
+
+            if (targetVoice) {
+                console.log("Speaking using voice:", targetVoice.name);
+                utterance.voice = targetVoice;
+                
+                // If using Hindi voice, slow it down slightly for clarity
+                if(targetVoice.lang.includes('hi')) {
+                    utterance.rate = 0.9; 
+                }
+            }
+
+            utterance.volume = 1;
+            utterance.pitch = 1;
+
             utterance.onend = function() {
                 callback();
             };
