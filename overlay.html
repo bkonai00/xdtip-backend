@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xdtip Overlay</title>
+    <style>
+        /* Transparent Background */
+        body { margin: 0; padding: 0; overflow: hidden; background: transparent; font-family: 'Arial', sans-serif; }
+        
+        /* The Alert Box */
+        #alert-box {
+            display: none; 
+            position: absolute;
+            top: 50px; left: 50px;
+            background: rgba(0, 0, 0, 0.9);
+            border-left: 8px solid #ff3b3b;
+            padding: 20px;
+            border-radius: 8px;
+            width: 400px;
+            color: white;
+            box-shadow: 0 0 20px rgba(255, 59, 59, 0.5);
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        h1 { margin: 0; font-size: 24px; color: #ff3b3b; text-transform: uppercase; }
+        h2 { margin: 5px 0 0 0; font-size: 18px; font-weight: normal; }
+        p { margin: 10px 0 0 0; font-style: italic; color: #ddd; font-size: 20px; }
+        .highlight { font-weight: bold; color: white; }
+    </style>
+</head>
+<body>
+
+    <div id="alert-box">
+        <h1>New Tip!</h1>
+        <h2 id="alert-text">User sent 100 Tokens</h2>
+        <p id="alert-message">"This is an amazing stream!"</p>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const pathParts = window.location.pathname.split('/');
+        const obsToken = pathParts[pathParts.length - 1]; 
+
+        socket.emit('join-overlay', obsToken);
+
+        socket.on('new-tip', (data) => {
+            playAlert(data);
+        });
+
+        function playAlert(data) {
+            const box = document.getElementById('alert-box');
+            const text = document.getElementById('alert-text');
+            const msg = document.getElementById('alert-message');
+
+            // 1. Update Text
+            text.innerHTML = `<span class="highlight">${data.sender}</span> sent <span class="highlight">${data.amount}</span> Tokens`;
+            msg.innerText = `"${data.message}"`;
+
+            // 2. Show Box
+            box.style.display = 'block';
+
+            // 3. Play Audio
+            // (OBS Browser Source allows autoplay by default)
+            window.speechSynthesis.cancel(); 
+            const sentence = `${data.sender} sent ${data.amount} tokens. ${data.message}`;
+            const utterance = new SpeechSynthesisUtterance(sentence);
+            utterance.rate = 1;
+            
+            window.speechSynthesis.speak(utterance);
+
+            // 4. Hide after 6 seconds
+            setTimeout(() => {
+                box.style.display = 'none';
+            }, 6000);
+        }
+    </script>
+</body>
+</html>
