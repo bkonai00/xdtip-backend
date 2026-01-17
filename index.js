@@ -237,7 +237,12 @@ app.post("/become-creator", async (req, res) => {
    SEND TIP
 ======================= */
 app.post("/tip", async (req, res) => {
-  const { from_username, to_creator, amount, message } = req.body;
+  const { to_creator, amount, message } = req.body;
+const viewerUsername = req.headers["x-user"];
+
+if (!viewerUsername) {
+  return res.status(401).json({ error: "Please login first" });
+}
 
   if (!from_username || !to_creator || !amount) {
     return res.status(400).json({ error: "Missing required fields" });
@@ -250,7 +255,7 @@ app.post("/tip", async (req, res) => {
   const { data: viewer } = await supabase
     .from("users")
     .select("id, token_balance")
-    .eq("username", from_username)
+    .eq("username", viewerUsername)
     .single();
 
   if (!viewer || viewer.token_balance < amount) {
