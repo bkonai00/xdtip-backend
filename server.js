@@ -118,13 +118,26 @@ app.post('/login', async (req, res) => {
 });
 
 // D. Get User Details
+// D. Get User Details
 app.get('/me', authenticateToken, async (req, res) => {
     try {
         const { data: user } = await supabase
+            // ✅ ADDED 'overlay_theme' here
             .from('users')
-            .select('id, username, role, balance, obs_token, logo_url')
+            .select('id, username, role, balance, obs_token, logo_url, overlay_theme') 
             .eq('id', req.user.id).single();
         res.json({ success: true, user });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update Overlay Theme
+app.post('/update-theme', authenticateToken, async (req, res) => {
+    const { theme } = req.body;
+    try {
+        await supabase.from('users').update({ overlay_theme: theme }).eq('id', req.user.id);
+        res.json({ success: true, message: "Theme Updated!" });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -229,12 +242,24 @@ app.post('/upload-logo', authenticateToken, upload.single('logo'), async (req, r
     }
 });
 
-// I. Serve Overlay HTML
+// I. Serve Overlay HTML (Dynamic Theme)
 app.get('/overlay/:token', async (req, res) => {
     const { token } = req.params;
-    const { data: user } = await supabase.from('users').select('username').eq('obs_token', token).single();
+    
+    // 1. Find User & Their Theme
+    const { data: user } = await supabase
+        .from('users').select('username, overlay_theme').eq('obs_token', token).single();
+
     if (!user) return res.status(404).send("Invalid Overlay Link");
-    res.sendFile(path.join(__dirname, 'overlay.html'));
+
+    // 2. Decide which file to serve
+    let fileToSend = 'overlay.html'; // Default (Classic)
+    
+    if (user.overlay_theme === 'neon') fileToSend = 'overlay_neon.html';
+    if (user.overlay_theme === 'minimal') fileToSend = 'overlay_minimal.html';
+
+    // 3. Send the file
+    res.sendFile(path.join(__dirname, fileToSend));
 });
 
 // J. Request Withdrawal
@@ -360,5 +385,6 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
