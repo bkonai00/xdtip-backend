@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Neon Overlay</title>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+        body { margin: 0; padding: 0; overflow: hidden; background: transparent; height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Orbitron', sans-serif; }
+        
+        #alert-box {
+            text-align: center; opacity: 0; transform: scale(0.8);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            border: 2px solid #00ffcc;
+            box-shadow: 0 0 20px #00ffcc, inset 0 0 20px #00ffcc;
+            border-radius: 10px;
+            min-width: 400px;
+        }
+        #alert-box.show { opacity: 1; transform: scale(1); }
+        
+        .alert-image { width: 120px; height: 120px; border: 3px solid #fff; border-radius: 10px; object-fit: cover; margin-bottom: 15px; }
+        
+        .alert-text { font-size: 32px; color: #fff; margin: 0; text-transform: uppercase; letter-spacing: 2px; }
+        .highlight { color: #00ffcc; text-shadow: 0 0 10px #00ffcc; }
+        .amount { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; }
+        
+        .message { font-size: 20px; color: #ddd; margin-top: 15px; font-family: sans-serif; border-top: 1px solid #333; padding-top: 10px;}
+    </style>
+</head>
+<body>
+    <div id="alert-box">
+        <img src="https://media.giphy.com/media/26tOZ42Mg6pbTUPVS/giphy.gif" class="alert-image">
+        <h1 class="alert-text"><span id="sender" class="highlight">USER</span> <br> DONATED <br> <span id="amount" class="amount">500</span></h1>
+        <p class="message" id="message-text">Message goes here...</p>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // ... (COPY THE EXACT SCRIPT FROM YOUR overlay.html AND PASTE HERE) ...
+        // I am omitting it to save space, but you MUST copy the <script> block 
+        // from your previous overlay.html so the TTS works.
+        const socket = io();
+        const queue = [];
+        let isPlaying = false;
+        
+        // Load voices
+        let availableVoices = [];
+        window.speechSynthesis.onvoiceschanged = () => { availableVoices = window.speechSynthesis.getVoices(); };
+
+        const token = window.location.pathname.split('/').pop();
+        if(token) socket.emit('join-overlay', token);
+
+        socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
+
+        function processQueue() {
+            if (isPlaying || queue.length === 0) return;
+            isPlaying = true;
+            const data = queue.shift();
+            showAlert(data);
+        }
+
+        function showAlert(data) {
+            document.getElementById('sender').innerText = data.sender;
+            document.getElementById('amount').innerText = data.amount;
+            document.getElementById('message-text').innerText = data.message;
+            
+            const box = document.getElementById('alert-box');
+            box.classList.add('show');
+
+            speakText(`${data.sender} sent ${data.amount} tokens. ${data.message}`, () => {
+                setTimeout(() => { box.classList.remove('show'); setTimeout(() => { isPlaying = false; processQueue(); }, 1000); }, 2000);
+            });
+        }
+
+        function speakText(text, callback) {
+            if (!window.speechSynthesis) return callback();
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voices = window.speechSynthesis.getVoices();
+            let targetVoice = voices.find(v => v.lang.includes('hi-IN')) || voices.find(v => v.lang.includes('en'));
+            if (targetVoice) utterance.voice = targetVoice;
+            utterance.onend = callback;
+            window.speechSynthesis.speak(utterance);
+        }
+    </script>
+</body>
+</html>
