@@ -279,8 +279,32 @@ app.post('/withdraw', authenticateToken, async (req, res) => {
     }
 });
 
+// K. Get Withdrawal History
+app.get('/withdrawals', authenticateToken, async (req, res) => {
+    try {
+        const { data: withdrawals, error } = await supabase
+            .from('withdrawals')
+            .select('*')
+            .eq('user_id', req.user.id)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Format Date for Frontend
+        const history = withdrawals.map(w => ({
+            amount: w.amount,
+            status: w.status, // 'pending' or 'paid'
+            date: new Date(w.created_at).toLocaleDateString()
+        }));
+
+        res.json({ success: true, history });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ==========================================
-// K. WEBHOOK PAYMENT (Username Edition)
+// L. WEBHOOK PAYMENT (Username Edition)
 // ==========================================
 app.post('/webhook', async (req, res) => {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -336,5 +360,6 @@ server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 
 });
+
 
 
