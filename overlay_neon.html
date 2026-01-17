@@ -74,12 +74,47 @@
         }
 
         function speakText(text, callback) {
-            if (!window.speechSynthesis) return callback();
+            if (!window.speechSynthesis) {
+                console.error("Browser does not support TTS");
+                return callback();
+            }
+
+            // Cancel any currently playing audio
+            window.speechSynthesis.cancel();
+
             const utterance = new SpeechSynthesisUtterance(text);
             const voices = window.speechSynthesis.getVoices();
-            let targetVoice = voices.find(v => v.lang.includes('hi-IN')) || voices.find(v => v.lang.includes('en'));
-            if (targetVoice) utterance.voice = targetVoice;
-            utterance.onend = callback;
+
+            // 🎯 NEW PRIORITY FOR HINGLISH:
+            // 1. English (India) -> Best for "Kya haal hai bro"
+            // 2. Hindi (India)   -> Backup
+            // 3. Generic English -> Final Backup
+            let targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
+                              voices.find(v => v.lang.includes('hi-IN')) || 
+                              voices.find(v => v.lang.includes('en'));
+
+            if (targetVoice) {
+                console.log("🗣️ Speaking with:", targetVoice.name);
+                utterance.voice = targetVoice;
+                
+                // Tweak these for better Hinglish flow
+                utterance.rate = 1.0;  // Normal speed (0.9 was too slow for English voice)
+                utterance.pitch = 1.0; // Normal pitch
+            } else {
+                console.log("⚠️ No specific voice found, using default.");
+            }
+
+            // Handle End
+            utterance.onend = function() {
+                callback();
+            };
+
+            // Handle Errors
+            utterance.onerror = function(e) {
+                console.error("TTS Error:", e);
+                callback();
+            };
+
             window.speechSynthesis.speak(utterance);
         }
     </script>
