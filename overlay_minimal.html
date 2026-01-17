@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Minimal Overlay</title>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+        body { margin: 0; padding: 0; overflow: hidden; background: transparent; height: 100vh; display: flex; align-items: flex-end; justify-content: flex-start; padding: 40px; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        
+        #alert-box {
+            background: white; color: black; padding: 20px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            display: flex; align-items: center; gap: 20px;
+            opacity: 0; transform: translateY(20px);
+            transition: all 0.5s ease;
+            max-width: 500px;
+        }
+        #alert-box.show { opacity: 1; transform: translateY(0); }
+        
+        .alert-icon { font-size: 40px; }
+        .content { display: flex; flex-direction: column; }
+        .title { font-weight: 600; font-size: 18px; }
+        .highlight { color: #ff3b3b; }
+        .message { font-size: 14px; color: #555; margin-top: 2px; }
+    </style>
+</head>
+<body>
+    <div id="alert-box">
+        <div class="alert-icon">🎉</div>
+        <div class="content">
+            <div class="title"><span id="sender" class="highlight">Name</span> tipped <span id="amount">100</span>!</div>
+            <div class="message" id="message-text">Message...</div>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // ... (COPY THE EXACT SCRIPT LOGIC FROM ABOVE) ...
+        const socket = io();
+        const queue = [];
+        let isPlaying = false;
+        
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+        const token = window.location.pathname.split('/').pop();
+        if(token) socket.emit('join-overlay', token);
+        socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
+
+        function processQueue() {
+            if (isPlaying || queue.length === 0) return;
+            isPlaying = true;
+            const data = queue.shift();
+            showAlert(data);
+        }
+
+        function showAlert(data) {
+            document.getElementById('sender').innerText = data.sender;
+            document.getElementById('amount').innerText = data.amount;
+            document.getElementById('message-text').innerText = data.message;
+            
+            const box = document.getElementById('alert-box');
+            box.classList.add('show');
+
+            speakText(`${data.sender} sent ${data.amount} tokens. ${data.message}`, () => {
+                setTimeout(() => { box.classList.remove('show'); setTimeout(() => { isPlaying = false; processQueue(); }, 1000); }, 2000);
+            });
+        }
+
+        function speakText(text, callback) {
+            if (!window.speechSynthesis) return callback();
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voices = window.speechSynthesis.getVoices();
+            let targetVoice = voices.find(v => v.lang.includes('hi-IN')) || voices.find(v => v.lang.includes('en'));
+            if (targetVoice) utterance.voice = targetVoice;
+            utterance.onend = callback;
+            window.speechSynthesis.speak(utterance);
+        }
+    </script>
+</body>
+</html>
