@@ -249,6 +249,36 @@ app.get('/overlay/:token', async (req, res) => {
     res.sendFile(path.join(__dirname, 'overlay.html'));
 });
 
+// J. Request Withdrawal
+app.post('/withdraw', authenticateToken, async (req, res) => {
+    const { amount, upiId } = req.body;
+    const userId = req.user.id;
+
+    if (amount < 100) return res.status(400).json({ error: "Min withdrawal is 100" });
+
+    try {
+        // 1. Check Balance
+        const { data: user } = await supabase.from('users').select('balance').eq('id', userId).single();
+        
+        if (user.balance < amount) return res.status(400).json({ error: "Insufficient balance" });
+
+        // 2. Deduct Balance IMMEDIATELY (to prevent double withdraw)
+        const { error: balError } = await supabase.rpc('decrement_balance', { user_id: userId, amount: amount });
+        if (balError) throw balError;
+
+        // 3. Create Withdrawal Request
+        const { error: reqError } = await supabase
+            .from('withdrawals')
+            .insert([{ user_id: userId, amount, upi_id: upiId }]);
+
+        if (reqError) throw reqError;
+
+        res.json({ success: true, message: "Withdrawal Requested! Admin will process it." });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ==========================================
 // K. WEBHOOK PAYMENT (Username Edition)
 // ==========================================
@@ -306,4 +336,5 @@ server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 
 });
+
 
