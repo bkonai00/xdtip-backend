@@ -1,27 +1,16 @@
 require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
-const crypto = require("crypto");
 const http = require("http");
+const crypto = require("crypto");
 const { Server } = require("socket.io");
 const { createClient } = require("@supabase/supabase-js");
 
-const PORT = process.env.PORT || 10000;
-
-/* =======================
-   SUPABASE
-======================= */
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-/* =======================
-   EXPRESS APP
-======================= */
 const app = express();
 
+/* =======================
+   CORS (IMPORTANT)
+======================= */
 app.use(
   cors({
     origin: [
@@ -34,19 +23,23 @@ app.use(
   })
 );
 
-
-// Razorpay webhook needs RAW body
-app.use(cors({ ... }));      // FIRST
-app.use(express.json());    // SECOND
+/* =======================
+   BODY PARSERS
+======================= */
+app.use(express.json());
 
 app.use(
   "/webhook/razorpay",
   express.raw({ type: "application/json" })
 );
 
-
-// Normal JSON for rest APIs
-app.use(express.json());
+/* =======================
+   SUPABASE
+======================= */
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 /* =======================
    HTTP + SOCKET.IO
@@ -60,17 +53,23 @@ const io = new Server(server, {
 });
 
 io.on("connection", (socket) => {
-  console.log("🔌 Overlay connected");
+  console.log("🔌 Socket connected:", socket.id);
 
   socket.on("join_creator", (creatorSlug) => {
     socket.join(creatorSlug);
-    console.log(`🎥 Joined creator room: ${creatorSlug}`);
+    console.log("🎥 Joined creator room:", creatorSlug);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("❌ Socket disconnected:", socket.id);
   });
 });
 
 /* =======================
-   SERVER START
+   START SERVER
 ======================= */
+const PORT = process.env.PORT || 10000;
+
 server.listen(PORT, "0.0.0.0", () => {
   console.log("Server running on port", PORT);
 });
