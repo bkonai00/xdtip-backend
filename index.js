@@ -22,13 +22,28 @@ const supabase = createClient(
 ======================= */
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "https://bkonai00.github.io",
+      "http://localhost:3000",
+      "http://localhost:5500"
+    ],
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "x-user"]
+  })
+);
+
 
 // Razorpay webhook needs RAW body
+app.use(cors({ ... }));      // FIRST
+app.use(express.json());    // SECOND
+
 app.use(
   "/webhook/razorpay",
   express.raw({ type: "application/json" })
 );
+
 
 // Normal JSON for rest APIs
 app.use(express.json());
