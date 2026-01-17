@@ -213,7 +213,8 @@ const upload = multer({ storage: storage });
 app.post('/upload-logo', authenticateToken, upload.single('logo'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-        const fullUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+        // ✅ FORCE HTTPS
+const fullUrl = `https://${req.get('host')}/uploads/${req.file.filename}`;
         await supabase.from('users').update({ logo_url: fullUrl }).eq('id', req.user.id);
         res.json({ success: true, url: fullUrl });
     } catch (err) {
@@ -284,4 +285,5 @@ app.post('/webhook', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+
 });
