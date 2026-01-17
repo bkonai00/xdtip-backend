@@ -278,6 +278,7 @@ app.get('/withdrawals', authenticateToken, async (req, res) => {
         if (error) throw error;
 
         const history = withdrawals.map(w => ({
+            t_id: w.t_id,
             amount: w.amount,
             status: w.status,
             date: new Date(w.created_at).toLocaleDateString()
@@ -359,4 +360,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
