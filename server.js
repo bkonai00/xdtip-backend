@@ -1,5 +1,5 @@
 // ==========================================
-// XDTIP BACKEND SERVER (Master Version)
+// XDTIP BACKEND SERVER (Final Master Version)
 // ==========================================
 
 require('dotenv').config();
@@ -9,11 +9,10 @@ const { createClient } = require('@supabase/supabase-js');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const multer = require('multer');
-const fs = require('fs');
 const http = require('http');
 const { Server } = require('socket.io');
-const bcrypt = require('bcryptjs'); 
-const crypto = require('crypto'); // <--- Required for Razorpay Webhook
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 // 1. INITIALIZE APP & SERVER
 const app = express();
@@ -30,9 +29,6 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 // 4. MIDDLEWARE
 app.use(cors());
 app.use(express.json());
-
-// 5. SERVE STATIC FILES (Images & Overlay)
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ------------------------------------------
 // AUTHENTICATION CHECKER
@@ -56,7 +52,7 @@ const authenticateToken = (req, res, next) => {
 io.on('connection', (socket) => {
     console.log('Socket connected:', socket.id);
 
-    // Join Overlay Room (Secure)
+    // Join Overlay Room
     socket.on('join-overlay', async (token) => {
         const { data: user } = await supabase
             .from('users').select('username').eq('obs_token', token).single();
@@ -178,7 +174,7 @@ app.post('/tip', authenticateToken, async (req, res) => {
     }
 });
 
-// G. Get History
+// G. Get Tip History
 app.get('/history', authenticateToken, async (req, res) => {
     try {
         const { data: tips, error } = await supabase
@@ -200,8 +196,7 @@ app.get('/history', authenticateToken, async (req, res) => {
     }
 });
 
-// H. Upload Logo (To Supabase Storage)
-// Use Memory Storage so we can forward the file to Supabase
+// H. Upload Logo (Supabase Storage)
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -209,13 +204,10 @@ app.post('/upload-logo', authenticateToken, upload.single('logo'), async (req, r
     try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-        // 1. Create a unique filename
-        // Clean the filename to remove spaces/special chars
         const cleanName = req.file.originalname.replace(/[^a-zA-Z0-9.]/g, '');
         const filename = `user_${req.user.id}_${Date.now()}_${cleanName}`;
 
-        // 2. Upload to Supabase Storage ('logos' bucket)
-        const { data, error } = await supabase.storage
+        const { error } = await supabase.storage
             .from('logos')
             .upload(filename, req.file.buffer, {
                 contentType: req.file.mimetype,
@@ -224,19 +216,15 @@ app.post('/upload-logo', authenticateToken, upload.single('logo'), async (req, r
 
         if (error) throw error;
 
-        // 3. Get the Public URL
         const { data: publicData } = supabase.storage
             .from('logos')
             .getPublicUrl(filename);
 
         const fullUrl = publicData.publicUrl;
-
-        // 4. Save URL to User Profile in Database
         await supabase.from('users').update({ logo_url: fullUrl }).eq('id', req.user.id);
 
         res.json({ success: true, url: fullUrl });
     } catch (err) {
-        console.error("Upload Error:", err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -257,16 +245,15 @@ app.post('/withdraw', authenticateToken, async (req, res) => {
     if (amount < 100) return res.status(400).json({ error: "Min withdrawal is 100" });
 
     try {
-        // 1. Check Balance
         const { data: user } = await supabase.from('users').select('balance').eq('id', userId).single();
         
         if (user.balance < amount) return res.status(400).json({ error: "Insufficient balance" });
 
-        // 2. Deduct Balance IMMEDIATELY (to prevent double withdraw)
+        // Deduct Balance
         const { error: balError } = await supabase.rpc('decrement_balance', { user_id: userId, amount: amount });
         if (balError) throw balError;
 
-        // 3. Create Withdrawal Request
+        // Create Request (Linked to public.users)
         const { error: reqError } = await supabase
             .from('withdrawals')
             .insert([{ user_id: userId, amount, upi_id: upiId }]);
@@ -290,10 +277,9 @@ app.get('/withdrawals', authenticateToken, async (req, res) => {
 
         if (error) throw error;
 
-        // Format Date for Frontend
         const history = withdrawals.map(w => ({
             amount: w.amount,
-            status: w.status, // 'pending' or 'paid'
+            status: w.status,
             date: new Date(w.created_at).toLocaleDateString()
         }));
 
@@ -303,11 +289,10 @@ app.get('/withdrawals', authenticateToken, async (req, res) => {
     }
 });
 
-// L. WEBHOOK PAYMENT (Updated to Save Transaction History)
+// L. WEBHOOK PAYMENT (Razorpay -> Transactions)
 app.post('/webhook', async (req, res) => {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
-    // 1. Validate Signature
     const shasum = crypto.createHmac('sha256', secret);
     shasum.update(JSON.stringify(req.body));
     const digest = shasum.digest('hex');
@@ -318,40 +303,34 @@ app.post('/webhook', async (req, res) => {
 
         if (event === 'payment.captured') {
             const payment = req.body.payload.payment.entity;
-            const amount = payment.amount / 100; // Convert Paise -> Rupee
+            const amount = payment.amount / 100;
             const paymentId = payment.id;
             
             // LOOK FOR USERNAME IN NOTES
             let targetUser = payment.notes.username || payment.notes.Username;
 
-            console.log(`💰 Payment: ${amount} tokens. Target User: ${targetUser}`);
-
             if (!targetUser) {
-                console.log("❌ No username found in payment notes!");
-                return res.json({ status: 'ignored_no_username' });
+                console.log("❌ No username found in notes!");
+                return res.json({ status: 'ignored' });
             }
 
             try {
-                // Find User by USERNAME
                 const { data: user } = await supabase
                     .from('users').select('id').eq('username', targetUser).single();
 
                 if (user) {
-                    // A. Add Balance
                     await supabase.rpc('increment_balance', { user_id: user.id, amount: amount });
                     
-                    // B. ✅ SAVE TRANSACTION RECORD (The Missing Part)
+                    // SAVE TRANSACTION (Using your exact table schema)
                     await supabase.from('transactions').insert([{
                         user_id: user.id,
                         amount: amount,
-                        payment_id: paymentId,
+                        razorpay_payment_id: paymentId,
                         type: 'deposit',
                         status: 'success'
                     }]);
 
-                    console.log(`✅ Success! Added ${amount} tokens & saved history for ${targetUser}`);
-                } else {
-                    console.log(`❌ User '${targetUser}' does not exist.`);
+                    console.log(`✅ Added ${amount} to ${targetUser}`);
                 }
             } catch (err) { console.error("Database Error:", err); }
         }
@@ -361,5 +340,10 @@ app.post('/webhook', async (req, res) => {
     }
 });
 
-
-
+// ------------------------------------------
+// START SERVER
+// ------------------------------------------
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
