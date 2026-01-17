@@ -289,10 +289,11 @@ app.get('/withdrawals', authenticateToken, async (req, res) => {
     }
 });
 
-// L. WEBHOOK PAYMENT (Razorpay -> Transactions)
+// L. WEBHOOK PAYMENT (Debug Version)
 app.post('/webhook', async (req, res) => {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
+    // 1. Validate Signature
     const shasum = crypto.createHmac('sha256', secret);
     shasum.update(JSON.stringify(req.body));
     const digest = shasum.digest('hex');
@@ -319,10 +320,16 @@ app.post('/webhook', async (req, res) => {
                     .from('users').select('id').eq('username', targetUser).single();
 
                 if (user) {
-                    await supabase.rpc('increment_balance', { user_id: user.id, amount: amount });
+                    // A. Add Balance
+                    const { error: rpcError } = await supabase.rpc('increment_balance', { user_id: user.id, amount: amount });
+                    if (rpcError) {
+                        console.error("❌ Balance Update Failed:", rpcError.message);
+                    } else {
+                        console.log(`✅ Balance updated for ${targetUser}`);
+                    }
                     
-                    // SAVE TRANSACTION (Using your exact table schema)
-                    await supabase.from('transactions').insert([{
+                    // B. Save Transaction (WITH ERROR LOGGING)
+                    const { error: insertError } = await supabase.from('transactions').insert([{
                         user_id: user.id,
                         amount: amount,
                         razorpay_payment_id: paymentId,
@@ -330,7 +337,12 @@ app.post('/webhook', async (req, res) => {
                         status: 'success'
                     }]);
 
-                    console.log(`✅ Added ${amount} to ${targetUser}`);
+                    if (insertError) {
+                        // ⚠️ THIS WILL TELL US THE PROBLEM
+                        console.error("❌ Transaction Save Failed:", insertError.message, insertError.details);
+                    } else {
+                        console.log("✅ Transaction history saved!");
+                    }
                 }
             } catch (err) { console.error("Database Error:", err); }
         }
@@ -347,3 +359,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
