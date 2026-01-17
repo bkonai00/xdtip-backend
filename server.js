@@ -200,24 +200,43 @@ app.get('/history', authenticateToken, async (req, res) => {
     }
 });
 
-// H. Upload Logo
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => { cb(null, 'uploads/'); },
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `user_${req.user.id}_${Date.now()}${ext}`);
-    }
-});
+// H. Upload Logo (To Supabase Storage)
+// Use Memory Storage so we can forward the file to Supabase
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 app.post('/upload-logo', authenticateToken, upload.single('logo'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-        // ✅ FORCE HTTPS
-const fullUrl = `https://${req.get('host')}/uploads/${req.file.filename}`;
+
+        // 1. Create a unique filename
+        // Clean the filename to remove spaces/special chars
+        const cleanName = req.file.originalname.replace(/[^a-zA-Z0-9.]/g, '');
+        const filename = `user_${req.user.id}_${Date.now()}_${cleanName}`;
+
+        // 2. Upload to Supabase Storage ('logos' bucket)
+        const { data, error } = await supabase.storage
+            .from('logos')
+            .upload(filename, req.file.buffer, {
+                contentType: req.file.mimetype,
+                upsert: true
+            });
+
+        if (error) throw error;
+
+        // 3. Get the Public URL
+        const { data: publicData } = supabase.storage
+            .from('logos')
+            .getPublicUrl(filename);
+
+        const fullUrl = publicData.publicUrl;
+
+        // 4. Save URL to User Profile in Database
         await supabase.from('users').update({ logo_url: fullUrl }).eq('id', req.user.id);
+
         res.json({ success: true, url: fullUrl });
     } catch (err) {
+        console.error("Upload Error:", err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -287,3 +306,4 @@ server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 
 });
+
