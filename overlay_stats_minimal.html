@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Minimal Stats</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        
+        body { margin: 0; padding: 20px; overflow: hidden; background: transparent; font-family: 'Inter', sans-serif; }
+
+        /* MINIMAL BOX */
+        #stats-container {
+            width: 280px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 20px; color: #333;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+
+        .label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+
+        /* ROTATOR */
+        .rotator-box { display: flex; align-items: center; justify-content: space-between; height: 40px; }
+        
+        .tipper-name { 
+            font-size: 18px; font-weight: 800; color: #222; 
+            opacity: 0; transition: opacity 0.5s;
+        }
+        .tipper-amount { 
+            font-size: 16px; color: #2ecc71; font-weight: 700; background: #eafff2; padding: 2px 8px; border-radius: 6px;
+            opacity: 0; transition: opacity 0.5s;
+        }
+        .visible { opacity: 1 !important; }
+
+        .rank-badge { 
+            background: #222; color: #fff; width: 20px; height: 20px; display: inline-flex; 
+            align-items: center; justify-content: center; border-radius: 50%; font-size: 10px; margin-right: 8px;
+        }
+
+        /* LATEST LIST */
+        .divider { height: 1px; background: #eee; margin: 15px 0; }
+        .latest-list { list-style: none; padding: 0; margin: 0; }
+        .latest-item { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: #555; }
+        .latest-amt { color: #2ecc71; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div id="stats-container">
+        <div class="label">Top Supporter</div>
+        <div class="rotator-box">
+            <div style="display:flex; align-items:center;">
+                <span id="rank" class="rank-badge">1</span>
+                <span id="rotator-name" class="tipper-name">Loading...</span>
+            </div>
+            <span id="rotator-amount" class="tipper-amount">0</span>
+        </div>
+        <div class="divider"></div>
+        <div class="label">Recent Tips</div>
+        <ul id="latest-list" class="latest-list"></ul>
+    </div>
+
+    <script>
+        var socket = io(); var topTippers = []; var currentIndex = 0;
+        var pathParts = window.location.pathname.split('/');
+        var uuid = pathParts[pathParts.length - 1]; 
+        if (uuid) { socket.emit('join-overlay', uuid); fetchStats(); }
+        
+        async function fetchStats() {
+            try {
+                const res = await fetch(`/stats/${uuid}`);
+                const data = await res.json();
+                topTippers = data.top; 
+                if (topTippers.length > 0) { showNextTipper(); setInterval(showNextTipper, 3000); }
+                else { 
+                     var n = document.getElementById('rotator-name');
+                     n.innerText = "No Data"; n.classList.add('visible');
+                     document.getElementById('rotator-amount').classList.add('visible');
+                }
+                updateLatestList(data.latest);
+            } catch(e) {}
+        }
+        function showNextTipper() {
+            if (topTippers.length === 0) return;
+            var nameEl = document.getElementById('rotator-name');
+            var amtEl = document.getElementById('rotator-amount');
+            var rankEl = document.getElementById('rank');
+            nameEl.classList.remove('visible'); amtEl.classList.remove('visible');
+            setTimeout(() => {
+                var tipper = topTippers[currentIndex];
+                nameEl.innerText = tipper.sender_name || "Anon";
+                amtEl.innerText = "₹" + tipper.amount;
+                rankEl.innerText = (currentIndex + 1);
+                nameEl.classList.add('visible'); amtEl.classList.add('visible');
+                currentIndex++; if (currentIndex >= topTippers.length) currentIndex = 0;
+            }, 500);
+        }
+        function updateLatestList(d) {
+            var l = document.getElementById('latest-list'); l.innerHTML = "";
+            d.forEach(t => {
+                l.innerHTML += `<li class="latest-item"><span>${t.sender_name}</span><span class="latest-amt">₹${t.amount}</span></li>`;
+            });
+        }
+        socket.on('new-tip', () => fetchStats());
+    </script>
+</body>
+</html>
