@@ -47,12 +47,12 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ------------------------------------------
-// SOCKET CONNECTION
+// SOCKET CONNECTION (The Bridge)
 // ------------------------------------------
 io.on('connection', (socket) => {
     console.log('Socket connected:', socket.id);
 
-    // 1. Standard Join (For Dashboard & Frontend Overlay)
+    // 1. Dashboard/Frontend Join (Standard)
     socket.on('join', (room) => {
         if (room) {
             socket.join(room.toLowerCase());
@@ -60,11 +60,29 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 2. Backend Overlay Join (For app.xdfun.in/overlay/UUID)
-    socket.on('join-overlay', (uuid) => {
-        if (uuid) {
-            socket.join(uuid); 
-            console.log(`Overlay joined UUID room: ${uuid}`);
+    // 2. Overlay Join (The Fix)
+    // We translate the "Token" (from URL) into a "Username"
+    socket.on('join-overlay', async (token) => {
+        if (!token) return;
+
+        try {
+            // Ask Database: "Who owns this token?"
+            // We select 'username' because that is where the /tip route sends alerts
+            const { data: user } = await supabase
+                .from('users')
+                .select('username') // 👈 Look up the name
+                .eq('obs_token', token) // 👈 Match the token from URL
+                .single();
+
+            if (user && user.username) {
+                const roomName = user.username.toLowerCase();
+                socket.join(roomName); // ✅ Join the USERNAME room
+                console.log(`✅ Overlay (Token: ${token.slice(0,5)}...) bridged to Room: ${roomName}`);
+            } else {
+                console.log(`❌ Invalid Overlay Token: ${token}`);
+            }
+        } catch (err) {
+            console.error("Overlay Join Error:", err.message);
         }
     });
 });
@@ -383,4 +401,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
