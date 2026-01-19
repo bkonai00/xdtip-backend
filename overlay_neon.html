@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Overlay</title>
+    <title>Stream Overlay</title>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
@@ -15,6 +15,14 @@
             font-family: 'Orbitron', sans-serif; 
         }
         
+        /* Debug Status Light (Top Left) */
+        #status-light {
+            position: absolute; top: 10px; left: 10px;
+            width: 15px; height: 15px; border-radius: 50%;
+            background: red; border: 2px solid white;
+            z-index: 9999;
+        }
+
         #alert-box {
             text-align: center; opacity: 0; transform: scale(0.8);
             transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -52,16 +60,15 @@
     </style>
 </head>
 <body>
+    <div id="status-light" title="Red=Disconnected, Green=Connected"></div>
 
     <div id="alert-box">
         <img id="alert-image" src="https://media.giphy.com/media/xUPGGDNsLvqsBOhuU0/giphy.gif" class="alert-image">
-        
         <h1 class="alert-text">
             <span id="sender" class="highlight">USER</span> <br> 
             DONATED <br> 
             <span id="amount" class="amount">500</span>
         </h1>
-        
         <p class="message" id="message-text">Message goes here...</p>
     </div>
 
@@ -69,72 +76,74 @@
         // -------------------------------------------------
         // 1. CONFIGURATION
         // -------------------------------------------------
-        // ✅ UPDATED: Now pointing to your custom domain
-        const socket = io("https://app.xdfun.in"); 
+        // ⚠️ Point to your Render Backend
+        const socket = io("https://xdtip-backend.onrender.com"); 
         
         const queue = [];
         let isPlaying = false;
         let currentUtterance = null; 
 
         // -------------------------------------------------
-        // 2. CONNECT TO ROOM (SMART VERSION)
+        // 2. CONNECT LOGIC (Use ?u=USERNAME)
         // -------------------------------------------------
         const urlParams = new URLSearchParams(window.location.search);
-        let identity = urlParams.get('u'); 
+        let username = urlParams.get('u'); 
 
-        // If no "?u=" found, check the URL path for an ID (e.g. /overlay/9153...)
-        if (!identity) {
-            const path = window.location.pathname;
-            const parts = path.split('/');
-            // Grab the last part of the URL (ignoring empty strings)
-            const potentialId = parts.filter(p => p.length > 0).pop();
-            
-            // Ensure it's not just "overlay.html" or "overlay"
-            if (potentialId && potentialId !== "overlay.html" && potentialId !== "overlay") {
-                identity = potentialId;
-            }
-        }
-
-        if(identity) {
-            console.log("Listening for tips for:", identity);
-            
-            // ⚠️ CRITICAL: Emit BOTH events to be safe. 
-            // One handles Usernames (join), one handles UUIDs (join-overlay)
-            socket.emit('join', identity); 
-            socket.emit('join-overlay', identity); 
+        if (username) {
+            // ✅ FORCE LOWERCASE (Matches Backend Logic)
+            username = username.toLowerCase();
+            console.log("Listening for tips for:", username);
+            socket.emit('join', username); 
         } else {
-            console.error("No username or ID found! Use ?u=YOUR_NAME");
-            // Optional: Show error on screen so you know it failed
-            document.body.innerHTML += "<h3 style='color:red; background:black;'>Error: No Identity Found in URL</h3>";
+            console.error("❌ NO USERNAME! Add ?u=YOUR_NAME to the URL.");
+            // Flash red light to indicate error
+            setInterval(() => {
+                const light = document.getElementById('status-light');
+                light.style.background = light.style.background === 'red' ? 'black' : 'red';
+            }, 500);
         }
-        
-        // Debugging: Check if connection works
+
+        // Connection Status Light
         socket.on("connect", () => {
-            console.log("✅ Connected to app.xdfun.in successfully!");
+            console.log("✅ Connected!");
+            document.getElementById('status-light').style.background = "#00ff00"; // Green
         });
-        socket.on("connect_error", (err) => {
-            console.error("❌ Connection failed. Check if app.xdfun.in is online.", err);
+        socket.on("disconnect", () => {
+            console.log("❌ Disconnected");
+            document.getElementById('status-light').style.background = "red";
         });
 
-       function showAlert(data) {
-            // 1. SMART NAME DETECTION
-            // Check if backend sent 'tipper', 'sender', OR 'username'. 
-            // If all are missing, fall back to "Anonymous".
+        // -------------------------------------------------
+        // 3. RECEIVE & SHOW ALERT
+        // -------------------------------------------------
+        socket.on('new-tip', (data) => {
+            console.log("🔔 New Tip Received:", data);
+            queue.push(data);
+            processQueue();
+        });
+
+        function processQueue() {
+            if (isPlaying || queue.length === 0) return;
+            isPlaying = true;
+            const data = queue.shift();
+            showAlert(data);
+        }
+
+        function showAlert(data) {
+            // Smart Name Check
             const senderName = data.tipper || data.sender || data.username || "Anonymous";
 
-            // A. UPDATE VISUALS
+            // Update Text
             document.getElementById('sender').innerText = senderName;
             document.getElementById('amount').innerText = "₹" + data.amount;
             document.getElementById('message-text').innerText = `"${data.message}"`;
             
-            // B. SHOW BOX
+            // Show Box
             const box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // C. PLAY AUDIO (TTS)
-            // Use the detected 'senderName' here too
+            // Speak
             const speechText = `${senderName} sent ${data.amount} rupees. ${data.message}`;
-
             speakText(speechText, () => {
                 setTimeout(() => {
                     box.classList.remove('show');
@@ -145,29 +154,24 @@
                 }, 2000); 
             });
         }
+
         // -------------------------------------------------
-        // 4. TTS FUNCTION
+        // 4. TTS ENGINE
         // -------------------------------------------------
         function speakText(text, callback) {
             if (!window.speechSynthesis) return callback();
-
             window.speechSynthesis.cancel();
             currentUtterance = new SpeechSynthesisUtterance(text);
-            
             const voices = window.speechSynthesis.getVoices();
-            const targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
-                                voices.find(v => v.lang.includes('hi-IN')) || 
-                                voices.find(v => v.lang.includes('en-US'));
-
-            if (targetVoice) currentUtterance.voice = targetVoice;
+            // Try to find a good voice, fallback to first available
+            const voice = voices.find(v => v.lang.includes('en-IN')) || voices[0];
+            if (voice) currentUtterance.voice = voice;
             
-            currentUtterance.onend = function() { currentUtterance = null; callback(); };
-            currentUtterance.onerror = function() { currentUtterance = null; callback(); };
-
+            currentUtterance.onend = () => { currentUtterance = null; callback(); };
+            currentUtterance.onerror = () => { currentUtterance = null; callback(); };
             window.speechSynthesis.speak(currentUtterance);
         }
-        
-        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
     </script>
 </body>
 </html>
