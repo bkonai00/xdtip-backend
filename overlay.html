@@ -35,7 +35,7 @@
     </div>
 
     <script>
-        // 1. CONNECT
+        // 1. CONNECT (Using 'var' to prevent crashes)
         var socket = io(); 
         var queue = [];
         var isPlaying = false;
@@ -49,7 +49,6 @@
             socket.emit('join-overlay', uuid);
         } else {
             console.error("❌ No UUID found");
-            document.body.innerHTML = "<h2 style='color:white'>Error: No UUID Found</h2>";
         }
 
         // 3. LISTEN
