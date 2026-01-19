@@ -260,13 +260,10 @@ app.post('/upload-logo', authenticateToken, upload.single('logo'), async (req, r
     }
 });
 
-// I. Serve Overlay HTML (Dynamic Theme)
-// Only needed if you use /overlay/TOKEN logic on backend
+// I. Serve Overlay HTML (SIMPLIFIED FOR REBUILD)
 app.get('/overlay/:token', async (req, res) => {
-    const { token } = req.params;
-    
-    // We send the file, and the file's JS will grab the token from URL
-    // We don't need to validate token here strictly, let client side connect.
+    // We ignore the theme for now to ensure IT WORKS.
+    // It will always serve the new Master 'overlay.html' file.
     res.sendFile(path.join(__dirname, 'overlay.html'));
 });
 
@@ -386,3 +383,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
