@@ -2,77 +2,134 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Neon Overlay</title>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
-        body { margin: 0; padding: 0; overflow: hidden; background: transparent; height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Orbitron', sans-serif; }
+        
+        body { 
+            margin: 0; padding: 0; overflow: hidden; 
+            background: transparent; height: 100vh; 
+            display: flex; align-items: center; justify-content: center; 
+            font-family: 'Orbitron', sans-serif; 
+        }
         
         #alert-box {
             text-align: center; opacity: 0; transform: scale(0.8);
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            background: rgba(0, 0, 0, 0.8);
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background: rgba(0, 0, 0, 0.85);
             padding: 30px;
             border: 2px solid #00ffcc;
             box-shadow: 0 0 20px #00ffcc, inset 0 0 20px #00ffcc;
-            border-radius: 10px;
-            min-width: 400px;
+            border-radius: 15px;
+            min-width: 450px;
+            max-width: 600px;
         }
+        
         #alert-box.show { opacity: 1; transform: scale(1); }
         
-        .alert-image { width: 120px; height: 120px; border: 3px solid #fff; border-radius: 10px; object-fit: cover; margin-bottom: 15px; }
+        .alert-image { 
+            width: 120px; height: 120px; 
+            border: 3px solid #fff; border-radius: 10px; 
+            object-fit: cover; margin-bottom: 15px; 
+            box-shadow: 0 0 15px rgba(255,255,255,0.5);
+        }
         
-        .alert-text { font-size: 32px; color: #fff; margin: 0; text-transform: uppercase; letter-spacing: 2px; }
+        .alert-text { 
+            font-size: 32px; color: #fff; margin: 0; 
+            text-transform: uppercase; letter-spacing: 2px; line-height: 1.2;
+        }
+        
         .highlight { color: #00ffcc; text-shadow: 0 0 10px #00ffcc; }
-        .amount { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; }
+        .amount { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; font-size: 40px; display: block; margin: 10px 0;}
         
-        .message { font-size: 20px; color: #ddd; margin-top: 15px; font-family: sans-serif; border-top: 1px solid #333; padding-top: 10px;}
+        .message { 
+            font-size: 24px; color: #eee; margin-top: 15px; 
+            font-family: sans-serif; font-style: italic;
+            border-top: 1px solid #333; padding-top: 15px;
+        }
     </style>
 </head>
 <body>
+
     <div id="alert-box">
-        <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Z5eXhmYXJ5eXhmYXJ5eXhmYXJ5eXhmYXJ5eXhmYXJ5eXhmYXJ5eCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/LdOyjZ7io5Msw/giphy.gif" class="alert-image">
-        <h1 class="alert-text"><span id="sender" class="highlight">USER</span> <br> DONATED <br> <span id="amount" class="amount">500</span></h1>
+        <img id="alert-image" src="https://media.giphy.com/media/xUPGGDNsLvqsBOhuU0/giphy.gif" class="alert-image">
+        
+        <h1 class="alert-text">
+            <span id="sender" class="highlight">USER</span> <br> 
+            DONATED <br> 
+            <span id="amount" class="amount">500</span>
+        </h1>
+        
         <p class="message" id="message-text">Message goes here...</p>
     </div>
-    <script src="/socket.io/socket.io.js"></script>
+
     <script>
-        // ... (COPY THE EXACT SCRIPT FROM YOUR overlay.html AND PASTE HERE) ...
-        // I am omitting it to save space, but you MUST copy the <script> block 
-        // from your previous overlay.html so the TTS works.
-        const socket = io();
+        // -------------------------------------------------
+        // 1. CONFIGURATION
+        // -------------------------------------------------
+        // ✅ UPDATED: Now pointing to your custom domain
+        const socket = io("https://app.xdfun.in"); 
+        
         const queue = [];
         let isPlaying = false;
+        let currentUtterance = null; 
+
+        // -------------------------------------------------
+        // 2. CONNECT TO ROOM
+        // -------------------------------------------------
+        const urlParams = new URLSearchParams(window.location.search);
+        const username = urlParams.get('u'); 
+
+        if(username) {
+            console.log("Listening for tips for:", username);
+            socket.emit('join', username); 
+        } else {
+            console.error("No username provided! Use ?u=YOUR_NAME");
+        }
         
-        // Load voices
-        let availableVoices = [];
-        window.speechSynthesis.onvoiceschanged = () => { availableVoices = window.speechSynthesis.getVoices(); };
+        // Debugging: Check if connection works
+        socket.on("connect", () => {
+            console.log("✅ Connected to app.xdfun.in successfully!");
+        });
+        socket.on("connect_error", (err) => {
+            console.error("❌ Connection failed. Check if app.xdfun.in is online.", err);
+        });
 
-        const token = window.location.pathname.split('/').pop();
-        if(token) socket.emit('join-overlay', token);
-
-        socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
+        // -------------------------------------------------
+        // 3. HANDLE INCOMING TIPS
+        // -------------------------------------------------
+        socket.on('new-tip', (data) => {
+            console.log("New Tip:", data);
+            queue.push(data);
+            processQueue();
+        });
 
         function processQueue() {
             if (isPlaying || queue.length === 0) return;
             isPlaying = true;
+            
             const data = queue.shift();
             showAlert(data);
         }
 
         function showAlert(data) {
-            // ... visual update code ...
-
+            // A. UPDATE VISUALS
+            document.getElementById('sender').innerText = data.tipper || "Anonymous";
+            document.getElementById('amount').innerText = "₹" + data.amount;
+            document.getElementById('message-text').innerText = `"${data.message}"`;
+            
+            // B. SHOW BOX
             const box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // ✅ COMBINE THEM CLEARLY
-            // We use a "comma" instead of a period for a more natural pause
-            const fullText = `${data.sender} sent ${data.amount} tokens, says: ${data.message}`;
+            // C. PLAY AUDIO (TTS)
+            const speechText = `${data.tipper} sent ${data.amount} rupees. ${data.message}`;
 
-            speakText(fullText, () => {
+            speakText(speechText, () => {
                 setTimeout(() => {
-                    box.classList.remove('show'); 
+                    box.classList.remove('show');
                     setTimeout(() => {
                         isPlaying = false;
                         processQueue(); 
@@ -80,58 +137,30 @@
                 }, 2000); 
             });
         }
-        // --- GLOBAL VARIABLES (To prevent audio cutting off) ---
-        const socket = io(); 
-        const queue = [];    
-        let isPlaying = false;
-        let currentUtterance = null; // ✅ GLOBAL VARIABLE (Fixes the bug)
 
-        // ... (Keep your loadVoices and other logic same) ...
-
-        // --- UPDATED TTS FUNCTION ---
+        // -------------------------------------------------
+        // 4. TTS FUNCTION
+        // -------------------------------------------------
         function speakText(text, callback) {
-            if (!window.speechSynthesis) {
-                console.error("No TTS Support");
-                return callback();
-            }
+            if (!window.speechSynthesis) return callback();
 
-            // Cancel old audio
             window.speechSynthesis.cancel();
-
-            // ✅ ASSIGN TO GLOBAL VARIABLE
             currentUtterance = new SpeechSynthesisUtterance(text);
             
             const voices = window.speechSynthesis.getVoices();
+            const targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
+                                voices.find(v => v.lang.includes('hi-IN')) || 
+                                voices.find(v => v.lang.includes('en-US'));
+
+            if (targetVoice) currentUtterance.voice = targetVoice;
             
-            // 1. English (India) - Best for Hinglish
-            // 2. Hindi (India)
-            // 3. Any English
-            let targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
-                              voices.find(v => v.lang.includes('hi-IN')) || 
-                              voices.find(v => v.lang.includes('en'));
-
-            if (targetVoice) {
-                currentUtterance.voice = targetVoice;
-                currentUtterance.rate = 1.0; 
-                currentUtterance.pitch = 1.0;
-            }
-
-            // ✅ DEBUGGING: Print what it is trying to say
-            console.log("🗣️ Speaking:", text);
-
-            currentUtterance.onend = function() {
-                currentUtterance = null; // Clean up after finishing
-                callback();
-            };
-
-            currentUtterance.onerror = function(e) {
-                console.error("TTS Error:", e);
-                currentUtterance = null;
-                callback();
-            };
+            currentUtterance.onend = function() { currentUtterance = null; callback(); };
+            currentUtterance.onerror = function() { currentUtterance = null; callback(); };
 
             window.speechSynthesis.speak(currentUtterance);
         }
+        
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
     </script>
 </body>
 </html>
