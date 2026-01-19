@@ -35,13 +35,28 @@
     </div>
 
     <script>
-        var socket = io(); var queue = []; var isPlaying = false;
-        window.speechSynthesis.onvoiceschanged = function() { window.speechSynthesis.getVoices(); };
+        var socket = io(); 
+        var queue = []; 
+        var isPlaying = false;
+        
+        // 1. Force load voices immediately
+        var availableVoices = [];
+        function loadVoices() {
+            availableVoices = window.speechSynthesis.getVoices();
+            console.log("🎤 Loaded " + availableVoices.length + " voices.");
+        }
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+        loadVoices(); // Try loading immediately too
 
+        // 2. Connection Logic
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
         if (!uuid) uuid = pathParts[pathParts.length - 2];
-        if (uuid && uuid !== "overlay") { socket.emit('join-overlay', uuid); }
+
+        if (uuid && uuid !== "overlay") {
+            console.log("✅ Joining:", uuid);
+            socket.emit('join-overlay', uuid);
+        }
 
         socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
 
@@ -51,33 +66,69 @@
             var data = queue.shift();
             showAlert(data);
         }
+
         function showAlert(data) {
             var senderName = data.tipper || "Anonymous";
             document.getElementById('sender').innerText = senderName;
             document.getElementById('amount').innerText = "₹" + data.amount;
-            document.getElementById('message-text').innerText = `"${data.message}"`;
+            
+            var msgElement = document.getElementById('message-text');
+            if(msgElement) msgElement.innerText = `"${data.message}"`;
             
             var box = document.getElementById('alert-box');
             box.classList.add('show');
 
+            // --- ⚠️ SMART TTS ENGINE ⚠️ ---
             if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
-                var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount}. ${data.message}`);
                 
-                var voices = window.speechSynthesis.getVoices();
-                var targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
-                                  voices.find(v => v.lang.includes('hi-IN')) || 
-                                  voices[0];
-                if(targetVoice) utter.voice = targetVoice;
-                utter.rate = 0.9;
+                // Full sentence to speak
+                var textToSpeak = `${senderName} sent ${data.amount}. ${data.message}`;
+                var utter = new SpeechSynthesisUtterance(textToSpeak);
+
+                // A. DETECT LANGUAGE (Is there Hindi Script?)
+                // Checks for Devanagari characters (नमस्ते)
+                var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
+
+                // B. SELECT VOICE BASED ON SCRIPT
+                var targetVoice = null;
+
+                if (hasHindiScript) {
+                    // If message has Hindi characters, FORCE a Hindi Voice
+                    console.log("🛑 Detected Hindi Script: Searching for Hindi Voice...");
+                    targetVoice = availableVoices.find(v => v.lang.includes('hi') || v.name.includes('Hindi'));
+                } else {
+                    // If English/Hinglish, prefer Indian English
+                    console.log("🟢 Detected English/Hinglish: Searching for Indian English...");
+                    targetVoice = availableVoices.find(v => v.lang.includes('en-IN') || v.name.includes('India'));
+                }
+
+                // Fallback to ANY voice if specific one fails
+                if (!targetVoice) targetVoice = availableVoices[0];
+
+                if (targetVoice) {
+                    console.log("🗣️ Speaking with:", targetVoice.name);
+                    utter.voice = targetVoice;
+                }
+
+                // C. SETTINGS
+                utter.rate = 0.9;  // Slightly slower is clearer
+                utter.pitch = 1.0;
 
                 utter.onend = () => finishAlert(box);
-                utter.onerror = () => finishAlert(box);
+                utter.onerror = (e) => { console.error("TTS Error:", e); finishAlert(box); };
+                
                 window.speechSynthesis.speak(utter);
-            } else { setTimeout(() => finishAlert(box), 4000); }
+            } else { 
+                setTimeout(() => finishAlert(box), 4000); 
+            }
         }
+
         function finishAlert(box) {
-            setTimeout(() => { box.classList.remove('show'); setTimeout(() => { isPlaying = false; processQueue(); }, 1000); }, 2000);
+            setTimeout(() => { 
+                box.classList.remove('show'); 
+                setTimeout(() => { isPlaying = false; processQueue(); }, 1000); 
+            }, 2000);
         }
     </script>
 </body>
