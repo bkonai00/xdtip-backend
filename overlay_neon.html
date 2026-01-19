@@ -73,16 +73,14 @@
         let isPlaying = false;
 
         // -------------------------------------------------
-        // 2. GET UUID FROM URL (THE FIX)
+        // 2. GET UUID FROM URL (Backend Logic)
         // -------------------------------------------------
         // The URL is like: https://app.xdfun.in/overlay/9153-c6d1...
-        // We need to grab that last part.
         const pathParts = window.location.pathname.split('/');
         const uuid = pathParts[pathParts.length - 1]; // Gets the ID from the end
 
         if (uuid && uuid !== "overlay") {
             console.log("✅ Joining Overlay Room:", uuid);
-            // Emitting 'join-overlay' matches the server.js logic you showed me
             socket.emit('join-overlay', uuid);
         } else {
             console.error("❌ No UUID found in URL");
