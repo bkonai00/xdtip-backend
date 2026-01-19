@@ -2,106 +2,159 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Minimal Stats</title>
+    <title>VIP Gold Stats</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&display=swap');
         
-        body { margin: 0; padding: 20px; overflow: hidden; background: transparent; font-family: 'Inter', sans-serif; }
-
-        /* MINIMAL BOX */
-        #stats-container {
-            width: 280px;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 12px;
-            padding: 20px; color: #333;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        body { 
+            margin: 0; padding: 20px; 
+            overflow: hidden; 
+            background: transparent; 
+            font-family: 'Montserrat', sans-serif; 
         }
 
-        .label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
-
-        /* ROTATOR */
-        .rotator-box { display: flex; align-items: center; justify-content: space-between; height: 40px; }
-        
-        .tipper-name { 
-            font-size: 18px; font-weight: 800; color: #222; 
-            opacity: 0; transition: opacity 0.5s;
-        }
-        .tipper-amount { 
-            font-size: 16px; color: #2ecc71; font-weight: 700; background: #eafff2; padding: 2px 8px; border-radius: 6px;
-            opacity: 0; transition: opacity 0.5s;
-        }
-        .visible { opacity: 1 !important; }
-
-        .rank-badge { 
-            background: #222; color: #fff; width: 20px; height: 20px; display: inline-flex; 
-            align-items: center; justify-content: center; border-radius: 50%; font-size: 10px; margin-right: 8px;
+        /* --- CONTAINER --- */
+        #vip-container {
+            width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px; /* Gap between top and bottom bars */
         }
 
-        /* LATEST LIST */
-        .divider { height: 1px; background: #eee; margin: 15px 0; }
-        .latest-list { list-style: none; padding: 0; margin: 0; }
-        .latest-item { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: #555; }
-        .latest-amt { color: #2ecc71; font-weight: 600; }
+        /* --- THE BAR STYLE (Black Pill with Gold Border) --- */
+        .stat-bar {
+            background: #000;
+            border: 2px solid #FFD700; /* Gold Border */
+            border-radius: 50px; /* Fully rounded pill shape */
+            padding: 8px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            height: 40px; /* Fixed height */
+        }
+
+        /* --- LEFT LABEL (e.g. #1 XD-Tipper) --- */
+        .label-text {
+            font-size: 18px;
+            font-weight: 800;
+            color: #fff;
+            text-transform: uppercase;
+        }
+
+        /* --- RIGHT VALUE (Name & Amount) --- */
+        .value-text {
+            font-size: 20px;
+            font-weight: 900;
+            color: #FFD700; /* Gold Text */
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+            white-space: nowrap;
+        }
+
+        /* --- ANIMATION FOR BOTTOM BAR --- */
+        .fade-in { animation: fadeIn 0.5s forwards; }
+        .fade-out { animation: fadeOut 0.5s forwards; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-5px); } }
+
     </style>
 </head>
 <body>
-    <div id="stats-container">
-        <div class="label">Top Supporter</div>
-        <div class="rotator-box">
-            <div style="display:flex; align-items:center;">
-                <span id="rank" class="rank-badge">1</span>
-                <span id="rotator-name" class="tipper-name">Loading...</span>
-            </div>
-            <span id="rotator-amount" class="tipper-amount">0</span>
+
+    <div id="vip-container">
+        
+        <div class="stat-bar">
+            <span class="label-text">#1 XD-TIPPER</span>
+            <span id="top-one-name" class="value-text">Loading...</span>
         </div>
-        <div class="divider"></div>
-        <div class="label">Recent Tips</div>
-        <ul id="latest-list" class="latest-list"></ul>
+
+        <div class="stat-bar">
+            <span class="label-text">!XDTIP</span>
+            <span id="rotating-text" class="value-text">Waiting for tips...</span>
+        </div>
+
     </div>
 
     <script>
-        var socket = io(); var topTippers = []; var currentIndex = 0;
+        var socket = io(); 
+        var topTippers = [];
+        var currentIndex = 0;
+        
+        // 1. GET UUID & CONNECT
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
-        if (uuid) { socket.emit('join-overlay', uuid); fetchStats(); }
-        
+
+        if (uuid) {
+            socket.emit('join-overlay', uuid);
+            fetchStats();
+        }
+
+        // 2. FETCH DATA
         async function fetchStats() {
             try {
                 const res = await fetch(`/stats/${uuid}`);
                 const data = await res.json();
                 topTippers = data.top; 
-                if (topTippers.length > 0) { showNextTipper(); setInterval(showNextTipper, 3000); }
-                else { 
-                     var n = document.getElementById('rotator-name');
-                     n.innerText = "No Data"; n.classList.add('visible');
-                     document.getElementById('rotator-amount').classList.add('visible');
-                }
-                updateLatestList(data.latest);
-            } catch(e) {}
+
+                updateDisplay();
+
+            } catch(e) { console.error(e); }
         }
-        function showNextTipper() {
+
+        // 3. UPDATE LOGIC
+        function updateDisplay() {
+            if (topTippers.length === 0) {
+                document.getElementById('top-one-name').innerText = "No One Yet";
+                document.getElementById('rotating-text').innerText = "Be the first!";
+                return;
+            }
+
+            // A. SET TOP BAR (Always #1)
+            var numberOne = topTippers[0];
+            document.getElementById('top-one-name').innerText = numberOne.sender_name.toUpperCase();
+
+            // B. START ROTATION FOR BOTTOM BAR
+            // Show first immediately
+            rotateBottomBar();
+            // Then rotate every 3 seconds
+            setInterval(rotateBottomBar, 3000); 
+        }
+
+        function rotateBottomBar() {
             if (topTippers.length === 0) return;
-            var nameEl = document.getElementById('rotator-name');
-            var amtEl = document.getElementById('rotator-amount');
-            var rankEl = document.getElementById('rank');
-            nameEl.classList.remove('visible'); amtEl.classList.remove('visible');
+
+            var el = document.getElementById('rotating-text');
+            
+            // 1. Fade Out
+            el.classList.remove('fade-in');
+            el.classList.add('fade-out');
+
             setTimeout(() => {
+                // 2. Change Text
                 var tipper = topTippers[currentIndex];
-                nameEl.innerText = tipper.sender_name || "Anon";
-                amtEl.innerText = "₹" + tipper.amount;
-                rankEl.innerText = (currentIndex + 1);
-                nameEl.classList.add('visible'); amtEl.classList.add('visible');
-                currentIndex++; if (currentIndex >= topTippers.length) currentIndex = 0;
-            }, 500);
+                // Format: "NAME - ₹AMOUNT"
+                el.innerText = `${tipper.sender_name} - ₹${tipper.amount}`;
+                
+                // 3. Fade In
+                el.classList.remove('fade-out');
+                el.classList.add('fade-in');
+
+                // 4. Next Index
+                currentIndex++;
+                if (currentIndex >= topTippers.length) currentIndex = 0;
+
+            }, 500); // Wait for fade out
         }
-        function updateLatestList(d) {
-            var l = document.getElementById('latest-list'); l.innerHTML = "";
-            d.forEach(t => {
-                l.innerHTML += `<li class="latest-item"><span>${t.sender_name}</span><span class="latest-amt">₹${t.amount}</span></li>`;
-            });
-        }
-        socket.on('new-tip', () => fetchStats());
+
+        // 4. LIVE UPDATE
+        socket.on('new-tip', () => {
+            // Reload data silently when a new tip comes in
+            fetchStats(); 
+        });
+
     </script>
 </body>
 </html>
