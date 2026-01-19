@@ -434,6 +434,49 @@ app.post('/webhook', async (req, res) => {
     }
 });
 
+// ==========================================
+// H. STATS API (Calculates Top 3 & Latest)
+// ==========================================
+app.get('/stats/:token', async (req, res) => {
+    const { token } = req.params;
+
+    try {
+        // 1. Get User ID from Token
+        const { data: user } = await supabase
+            .from('users')
+            .select('id')
+            .eq('obs_token', token)
+            .single();
+
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        // 2. Get Latest 3 Tips (For the list)
+        const { data: latest } = await supabase
+            .from('tips')
+            .select('sender_name, amount') // Ensure your column is named 'sender_name' or 'tipper'
+            .eq('receiver_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(3);
+
+        // 3. Get Top 3 Tippers (For the Rotator)
+        const { data: top } = await supabase
+            .from('tips')
+            .select('sender_name, amount')
+            .eq('receiver_id', user.id)
+            .order('amount', { ascending: false })
+            .limit(3);
+
+        res.json({
+            top: top || [], 
+            latest: latest || []
+        });
+
+    } catch (err) {
+        console.error("Stats Error:", err);
+        res.status(500).json({ error: "Stats failed" });
+    }
+});
+
 // ------------------------------------------
 // START SERVER
 // ------------------------------------------
@@ -455,6 +498,7 @@ server.listen(PORT, () => {
             top: top || [], 
             latest: latest || []
         });
+
 
 
 
