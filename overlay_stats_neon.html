@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Neon Stats</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;900&display=swap');
+        
+        body { margin: 0; padding: 20px; overflow: hidden; background: transparent; font-family: 'Orbitron', sans-serif; }
+
+        /* NEON BOX */
+        #stats-container {
+            width: 320px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #ff00ff;
+            box-shadow: 0 0 15px #ff00ff, inset 0 0 10px #ff00ff;
+            padding: 15px; color: #fff;
+            transform: skewX(-10deg); /* Cyberpunk Tilt */
+            margin-left: 20px;
+        }
+
+        .label { font-size: 10px; color: #00ffff; letter-spacing: 2px; margin-bottom: 5px; text-shadow: 0 0 5px #00ffff; }
+
+        /* ROTATOR */
+        .rotator-box { display: flex; align-items: center; justify-content: space-between; height: 50px; }
+        
+        .tipper-name { 
+            font-size: 22px; font-weight: 900; color: #fff; 
+            text-shadow: 2px 2px 0px #ff00ff;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .tipper-amount { 
+            font-size: 20px; color: #00ffff; text-shadow: 0 0 10px #00ffff; 
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .visible { opacity: 1 !important; }
+
+        .rank-badge { 
+            background: #ff00ff; color: #000; padding: 2px 5px; 
+            font-size: 12px; margin-right: 10px; font-weight: bold;
+        }
+
+        /* LATEST LIST */
+        .divider { height: 2px; background: #00ffff; margin: 15px 0; box-shadow: 0 0 10px #00ffff; }
+        .latest-list { list-style: none; padding: 0; margin: 0; }
+        .latest-item { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; color: #ddd; }
+        .latest-amt { color: #ff00ff; text-shadow: 0 0 5px #ff00ff; }
+    </style>
+</head>
+<body>
+    <div id="stats-container">
+        <div class="label">TOP COMMANDERS</div>
+        <div class="rotator-box">
+            <div style="display:flex; align-items:center;">
+                <span id="rank" class="rank-badge">#1</span>
+                <span id="rotator-name" class="tipper-name">Loading...</span>
+            </div>
+            <span id="rotator-amount" class="tipper-amount">0</span>
+        </div>
+        <div class="divider"></div>
+        <div class="label">INCOMING SIGNAL</div>
+        <ul id="latest-list" class="latest-list"></ul>
+    </div>
+
+    <script>
+        // ... (Use the exact script from the previous step) ...
+        // I will save space, but make sure to copy the <script> logic from your overlay_stats.html file!
+        var socket = io(); var topTippers = []; var currentIndex = 0;
+        var pathParts = window.location.pathname.split('/');
+        var uuid = pathParts[pathParts.length - 1]; 
+        if (uuid) { socket.emit('join-overlay', uuid); fetchStats(); }
+        
+        async function fetchStats() {
+            try {
+                const res = await fetch(`/stats/${uuid}`);
+                const data = await res.json();
+                topTippers = data.top; 
+                if (topTippers.length > 0) { showNextTipper(); setInterval(showNextTipper, 3000); }
+                else { 
+                     var n = document.getElementById('rotator-name');
+                     n.innerText = "No Data"; n.classList.add('visible');
+                     document.getElementById('rotator-amount').classList.add('visible');
+                }
+                updateLatestList(data.latest);
+            } catch(e) {}
+        }
+        function showNextTipper() {
+            if (topTippers.length === 0) return;
+            var nameEl = document.getElementById('rotator-name');
+            var amtEl = document.getElementById('rotator-amount');
+            var rankEl = document.getElementById('rank');
+            nameEl.classList.remove('visible'); amtEl.classList.remove('visible');
+            setTimeout(() => {
+                var tipper = topTippers[currentIndex];
+                nameEl.innerText = tipper.sender_name || "Anon";
+                amtEl.innerText = "₹" + tipper.amount;
+                rankEl.innerText = "#" + (currentIndex + 1);
+                nameEl.classList.add('visible'); amtEl.classList.add('visible');
+                currentIndex++; if (currentIndex >= topTippers.length) currentIndex = 0;
+            }, 300);
+        }
+        function updateLatestList(d) {
+            var l = document.getElementById('latest-list'); l.innerHTML = "";
+            d.forEach(t => {
+                l.innerHTML += `<li class="latest-item"><span>${t.sender_name}</span><span class="latest-amt">₹${t.amount}</span></li>`;
+            });
+        }
+        socket.on('new-tip', () => fetchStats());
+    </script>
+</body>
+</html>
