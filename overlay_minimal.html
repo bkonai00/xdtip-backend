@@ -82,7 +82,7 @@
                 
                 // Clean the text to remove special symbols that might confuse TTS
                 var cleanMessage = data.message.replace(/[^a-zA-Z0-9 \u0900-\u097F]/g, ""); 
-                var textToSpeak = `${senderName} sent ${data.amount}. ${cleanMessage}`;
+                var textToSpeak = `${senderName} sent ${data.amount} rupees. ${cleanMessage}`;
                 
                 var utter = new SpeechSynthesisUtterance(textToSpeak);
 
