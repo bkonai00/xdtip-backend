@@ -2,145 +2,80 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stream Overlay</title>
+    <title>Neon Overlay</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Hind:wght@600&display=swap');
         
-        body { 
-            margin: 0; padding: 0; overflow: hidden; 
-            background: transparent; height: 100vh; 
-            display: flex; align-items: center; justify-content: center; 
-            font-family: 'Orbitron', sans-serif; 
-        }
-
+        body { margin: 0; overflow: hidden; background: transparent; height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Orbitron', 'Hind', sans-serif; }
+        
         #alert-box {
-            text-align: center; opacity: 0; transform: scale(0.8);
-            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            background: rgba(0, 0, 0, 0.85);
-            padding: 30px;
-            border: 2px solid #00ffcc;
-            box-shadow: 0 0 20px #00ffcc, inset 0 0 20px #00ffcc;
-            border-radius: 15px;
-            min-width: 450px;
-            max-width: 600px;
+            text-align: center; opacity: 0; transform: skewX(-10deg) scale(0.8); transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+            background: rgba(0, 0, 0, 0.9); padding: 40px; border: 4px solid #ff00ff;
+            box-shadow: 0 0 30px #ff00ff, inset 0 0 20px #ff00ff; border-radius: 0px; min-width: 500px;
         }
+        #alert-box.show { opacity: 1; transform: skewX(-10deg) scale(1); }
         
-        #alert-box.show { opacity: 1; transform: scale(1); }
-        
-        .alert-image { 
-            width: 120px; height: 120px; 
-            border: 3px solid #fff; border-radius: 10px; 
-            object-fit: cover; margin-bottom: 15px; 
-            box-shadow: 0 0 15px rgba(255,255,255,0.5);
-        }
-        
-        .alert-text { 
-            font-size: 32px; color: #fff; margin: 0; 
-            text-transform: uppercase; letter-spacing: 2px; line-height: 1.2;
-        }
-        
-        .highlight { color: #00ffcc; text-shadow: 0 0 10px #00ffcc; }
-        .amount { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; font-size: 40px; display: block; margin: 10px 0;}
-        
-        .message { 
-            font-size: 24px; color: #eee; margin-top: 15px; 
-            font-family: sans-serif; font-style: italic;
-            border-top: 1px solid #333; padding-top: 15px;
-        }
+        .alert-text { font-size: 36px; color: #fff; margin: 0; text-transform: uppercase; text-shadow: 0 0 10px #fff; }
+        .highlight { color: #00ffff; text-shadow: 0 0 20px #00ffff; } 
+        .amount { color: #ff00ff; font-size: 50px; display: block; margin: 10px 0; text-shadow: 0 0 20px #ff00ff; }
+        .message { font-size: 22px; color: #ddd; margin-top: 20px; font-weight: normal; font-family: sans-serif; }
+        .alert-image { width: 100px; height: 100px; border: 3px solid #00ffff; border-radius: 50%; object-fit: cover; box-shadow: 0 0 15px #00ffff; }
     </style>
 </head>
 <body>
-
     <div id="alert-box">
-        <img id="alert-image" src="https://media.giphy.com/media/xUPGGDNsLvqsBOhuU0/giphy.gif" class="alert-image">
-        <h1 class="alert-text">
-            <span id="sender" class="highlight">USER</span> <br> 
-            DONATED <br> 
-            <span id="amount" class="amount">500</span>
-        </h1>
+        <img id="alert-image" src="https://media.giphy.com/media/xUPGGDNsLvqsBOhuU0/giphy.gif">
+        <h1 class="alert-text"><span id="sender" class="highlight">USER</span> <br> JUST DROPPED <br> <span id="amount" class="amount">500</span></h1>
         <p class="message" id="message-text">Message goes here...</p>
     </div>
 
     <script>
-        // -------------------------------------------------
-        // 1. CONNECT TO SELF (Backend Version)
-        // -------------------------------------------------
-        const socket = io(); // Connects to the same server serving this file
-        
-        const queue = [];
-        let isPlaying = false;
+        var socket = io(); var queue = []; var isPlaying = false;
+        window.speechSynthesis.onvoiceschanged = function() { window.speechSynthesis.getVoices(); };
 
-        // -------------------------------------------------
-        // 2. GET UUID FROM URL (Backend Logic)
-        // -------------------------------------------------
-        // The URL is like: https://app.xdfun.in/overlay/9153-c6d1...
-        const pathParts = window.location.pathname.split('/');
-        const uuid = pathParts[pathParts.length - 1]; // Gets the ID from the end
+        var pathParts = window.location.pathname.split('/');
+        var uuid = pathParts[pathParts.length - 1]; 
+        if (!uuid) uuid = pathParts[pathParts.length - 2];
+        if (uuid && uuid !== "overlay") { socket.emit('join-overlay', uuid); }
 
-        if (uuid && uuid !== "overlay") {
-            console.log("✅ Joining Overlay Room:", uuid);
-            socket.emit('join-overlay', uuid);
-        } else {
-            console.error("❌ No UUID found in URL");
-            document.body.innerHTML = "<h2 style='color:white; text-align:center;'>Error: Invalid Overlay URL<br>No UUID Found</h2>";
-        }
-
-        // -------------------------------------------------
-        // 3. LISTEN FOR TIPS
-        // -------------------------------------------------
-        socket.on('new-tip', (data) => {
-            console.log("🔔 New Tip Received:", data);
-            queue.push(data);
-            processQueue();
-        });
+        socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
 
         function processQueue() {
             if (isPlaying || queue.length === 0) return;
             isPlaying = true;
-            const data = queue.shift();
+            var data = queue.shift();
             showAlert(data);
         }
-
         function showAlert(data) {
-            // Smart Name Check
-            const senderName = data.tipper || data.sender || data.username || "Anonymous";
-
-            // Visuals
+            var senderName = data.tipper || "Anonymous";
             document.getElementById('sender').innerText = senderName;
             document.getElementById('amount').innerText = "₹" + data.amount;
             document.getElementById('message-text').innerText = `"${data.message}"`;
             
-            const box = document.getElementById('alert-box');
+            var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // TTS
-            const speechText = `${senderName} sent ${data.amount} rupees. ${data.message}`;
-            speakText(speechText, () => {
-                setTimeout(() => {
-                    box.classList.remove('show');
-                    setTimeout(() => {
-                        isPlaying = false;
-                        processQueue(); 
-                    }, 1000); 
-                }, 2000); 
-            });
-        }
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+                var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount}. ${data.message}`);
+                
+                var voices = window.speechSynthesis.getVoices();
+                var targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
+                                  voices.find(v => v.lang.includes('hi-IN')) || 
+                                  voices[0];
+                if(targetVoice) utter.voice = targetVoice;
+                utter.rate = 0.9;
 
-        // TTS Engine
-        function speakText(text, callback) {
-            if (!window.speechSynthesis) return callback();
-            window.speechSynthesis.cancel();
-            const utter = new SpeechSynthesisUtterance(text);
-            const voices = window.speechSynthesis.getVoices();
-            const voice = voices.find(v => v.lang.includes('en-IN')) || voices[0];
-            if (voice) utter.voice = voice;
-            utter.onend = () => callback();
-            utter.onerror = () => callback();
-            window.speechSynthesis.speak(utter);
+                utter.onend = () => finishAlert(box);
+                utter.onerror = () => finishAlert(box);
+                window.speechSynthesis.speak(utter);
+            } else { setTimeout(() => finishAlert(box), 4000); }
         }
-        window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+        function finishAlert(box) {
+            setTimeout(() => { box.classList.remove('show'); setTimeout(() => { isPlaying = false; processQueue(); }, 1000); }, 2000);
+        }
     </script>
 </body>
 </html>
