@@ -77,16 +77,35 @@
         let currentUtterance = null; 
 
         // -------------------------------------------------
-        // 2. CONNECT TO ROOM
+        // 2. CONNECT TO ROOM (SMART VERSION)
         // -------------------------------------------------
         const urlParams = new URLSearchParams(window.location.search);
-        const username = urlParams.get('u'); 
+        let identity = urlParams.get('u'); 
 
-        if(username) {
-            console.log("Listening for tips for:", username);
-            socket.emit('join', username); 
+        // If no "?u=" found, check the URL path for an ID (e.g. /overlay/9153...)
+        if (!identity) {
+            const path = window.location.pathname;
+            const parts = path.split('/');
+            // Grab the last part of the URL (ignoring empty strings)
+            const potentialId = parts.filter(p => p.length > 0).pop();
+            
+            // Ensure it's not just "overlay.html" or "overlay"
+            if (potentialId && potentialId !== "overlay.html" && potentialId !== "overlay") {
+                identity = potentialId;
+            }
+        }
+
+        if(identity) {
+            console.log("Listening for tips for:", identity);
+            
+            // ⚠️ CRITICAL: Emit BOTH events to be safe. 
+            // One handles Usernames (join), one handles UUIDs (join-overlay)
+            socket.emit('join', identity); 
+            socket.emit('join-overlay', identity); 
         } else {
-            console.error("No username provided! Use ?u=YOUR_NAME");
+            console.error("No username or ID found! Use ?u=YOUR_NAME");
+            // Optional: Show error on screen so you know it failed
+            document.body.innerHTML += "<h3 style='color:red; background:black;'>Error: No Identity Found in URL</h3>";
         }
         
         // Debugging: Check if connection works
