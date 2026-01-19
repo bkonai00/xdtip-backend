@@ -313,7 +313,7 @@ app.post('/test-alert', authenticateToken, (req, res) => {
     const fakeTip = {
         tipper: "Test Bot",
         amount: 69,
-        message: "This is a test alert! If you hear this, it works. 🔥"
+        message: "This is a test alert!, यह एक परीक्षण चेतावनी है!, Yah ek pareekshan chetawani hai!. 🔥"
     };
 
     console.log(`🚀 Sending Test Alert to room: ${username}`);
@@ -440,6 +440,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
