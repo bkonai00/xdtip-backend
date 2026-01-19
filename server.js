@@ -47,19 +47,24 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ------------------------------------------
-// SOCKET CONNECTION
+// SOCKET CONNECTION (Fixed for Overlay)
 // ------------------------------------------
 io.on('connection', (socket) => {
     console.log('Socket connected:', socket.id);
 
-    // Join Overlay Room
-    socket.on('join-overlay', async (token) => {
-        const { data: user } = await supabase
-            .from('users').select('username').eq('obs_token', token).single();
+    // 1. Standard Join (For Dashboard & Frontend Overlay)
+    socket.on('join', (room) => {
+        if (room) {
+            socket.join(room.toLowerCase()); // Force Lowercase for safety
+            console.log(`User joined room: ${room.toLowerCase()}`);
+        }
+    });
 
-        if (user) {
-            socket.join(user.username);
-            console.log(`Overlay joined room: ${user.username}`);
+    // 2. Backend Overlay Join (For app.xdfun.in/overlay/UUID)
+    socket.on('join-overlay', (uuid) => {
+        if (uuid) {
+            socket.join(uuid); // Join the specific UUID room
+            console.log(`Overlay joined UUID room: ${uuid}`);
         }
     });
 });
@@ -161,6 +166,7 @@ app.post('/tip', authenticateToken, async (req, res) => {
     if (amount < 10) return res.status(400).json({ error: "Min tip is 10" });
 
     try {
+        // Fetch Receiver ID to send alerts to their UUID room too
         const { data: receiver } = await supabase.from('users').select('id, balance').eq('username', receiverUsername).single();
         if (!receiver) return res.status(404).json({ error: "Creator not found" });
 
@@ -170,23 +176,35 @@ app.post('/tip', authenticateToken, async (req, res) => {
         const platformFee = amount * 0.05;
         const creatorShare = amount - platformFee;
 
+        // Transaction Logic
         await supabase.rpc('decrement_balance', { user_id: senderId, amount: amount });
         await supabase.rpc('increment_balance', { user_id: receiver.id, amount: creatorShare });
         await supabase.from('tips').insert([{ sender_id: senderId, receiver_id: receiver.id, amount, message }]);
 
-        // ALERT THE CREATOR
-        io.to(receiverUsername).emit('new-tip', {
-            sender: req.user.username,
+        // -----------------------------------------------------
+        // ⚠️ ALERT LOGIC (THE FIX)
+        // -----------------------------------------------------
+        const alertData = {
+            tipper: req.user.username, // Real Sender Name
             amount: amount,
             message: message
-        });
+        };
+
+        // 1. Send to Username Room (For Dashboard)
+        io.to(receiverUsername.toLowerCase()).emit('new-tip', alertData);
+
+        // 2. Send to UUID Room (For Overlay Link)
+        // We use receiver.id because that is what the UUID link uses
+        if (receiver.id) {
+            io.to(receiver.id).emit('new-tip', alertData); 
+        }
 
         res.json({ success: true, message: `Sent ${amount} tokens!` });
     } catch (err) {
+        console.error("Tip Error:", err);
         res.status(500).json({ error: err.message });
     }
 });
-
 // G. Get Tip History
 app.get('/history', authenticateToken, async (req, res) => {
     try {
@@ -385,6 +403,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
