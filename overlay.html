@@ -7,11 +7,18 @@
     <script src="/socket.io/socket.io.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
-        body { margin: 0; padding: 0; overflow: hidden; background: transparent; height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Orbitron', sans-serif; }
         
+        body { 
+            margin: 0; padding: 0; overflow: hidden; 
+            background: transparent; height: 100vh; 
+            display: flex; align-items: center; justify-content: center; 
+            font-family: 'Orbitron', sans-serif; 
+        }
+
+        /* DEFAULT STYLE (Classic) */
         #alert-box {
             text-align: center; opacity: 0; transform: scale(0.8);
-            transition: all 0.5s;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             background: rgba(0, 0, 0, 0.85);
             padding: 30px;
             border: 2px solid #00ffcc;
@@ -19,41 +26,59 @@
             border-radius: 15px;
             min-width: 450px;
         }
+        
         #alert-box.show { opacity: 1; transform: scale(1); }
+        
+        .alert-image { width: 120px; height: 120px; border: 3px solid #fff; border-radius: 10px; margin-bottom: 15px; object-fit: cover; }
         .alert-text { font-size: 32px; color: #fff; margin: 0; text-transform: uppercase; }
-        .highlight { color: #00ffcc; } 
-        .amount { color: #ff00ff; font-size: 40px; display: block; margin: 10px 0;}
+        .highlight { color: #00ffcc; text-shadow: 0 0 10px #00ffcc; }
+        .amount { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; font-size: 40px; display: block; margin: 10px 0;}
         .message { font-size: 24px; color: #eee; margin-top: 15px; font-style: italic; border-top: 1px solid #333; padding-top: 15px;}
-        .alert-image { width: 120px; height: 120px; border: 3px solid #fff; border-radius: 10px; margin-bottom: 15px; object-fit: cover;}
     </style>
 </head>
 <body>
+
     <div id="alert-box">
         <img id="alert-image" src="https://media.giphy.com/media/xUPGGDNsLvqsBOhuU0/giphy.gif" class="alert-image">
-        <h1 class="alert-text"><span id="sender" class="highlight">USER</span> <br> DONATED <br> <span id="amount" class="amount">500</span></h1>
+        <h1 class="alert-text">
+            <span id="sender" class="highlight">USER</span> <br> 
+            DONATED <br> 
+            <span id="amount" class="amount">500</span>
+        </h1>
         <p class="message" id="message-text">Message goes here...</p>
     </div>
 
     <script>
-        // 1. CONNECT (Using 'var' to prevent crashes)
+        // ==========================================
+        // 1. SAFE VARIABLES (Use 'var' to prevent crashes)
+        // ==========================================
         var socket = io(); 
         var queue = [];
         var isPlaying = false;
 
-        // 2. GET UUID FROM URL
+        // ==========================================
+        // 2. AUTO-DETECT UUID FROM URL
+        // ==========================================
+        // URL is: https://app.xdfun.in/overlay/UUID-HERE
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
 
+        // If URL ends in slash, grab the part before it
+        if (!uuid) uuid = pathParts[pathParts.length - 2];
+
         if (uuid && uuid !== "overlay") {
-            console.log("✅ Joining Overlay Room:", uuid);
+            console.log("✅ Joining Room:", uuid);
             socket.emit('join-overlay', uuid);
         } else {
-            console.error("❌ No UUID found");
+            console.error("❌ No UUID Found");
+            document.body.innerHTML = "<h1 style='color:red; background:black;'>Error: Invalid Overlay Link</h1>";
         }
 
-        // 3. LISTEN
+        // ==========================================
+        // 3. LISTEN FOR ALERTS
+        // ==========================================
         socket.on('new-tip', (data) => {
-            console.log("🔔 Tip:", data);
+            console.log("🔔 Alert Received:", data);
             queue.push(data);
             processQueue();
         });
@@ -66,34 +91,46 @@
         }
 
         function showAlert(data) {
+            // Fill Data
             var senderName = data.tipper || data.sender || data.username || "Anonymous";
             document.getElementById('sender').innerText = senderName;
             document.getElementById('amount').innerText = "₹" + data.amount;
             document.getElementById('message-text').innerText = `"${data.message}"`;
 
+            // Show Box
             var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // TTS
+            // Play TTS
             if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
                 var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount}. ${data.message}`);
+                // Try Indian English voice
                 var voices = window.speechSynthesis.getVoices();
                 utter.voice = voices.find(v => v.lang.includes('en-IN')) || voices[0];
-                utter.onend = () => { finishAlert(box); };
-                utter.onerror = () => { finishAlert(box); };
+                
+                utter.onend = function() { finishAlert(box); };
+                utter.onerror = function() { finishAlert(box); };
                 window.speechSynthesis.speak(utter);
             } else {
-                setTimeout(() => { finishAlert(box); }, 4000);
+                // Fallback if no audio
+                setTimeout(function() { finishAlert(box); }, 5000);
             }
         }
 
         function finishAlert(box) {
-            setTimeout(() => {
+            setTimeout(function() {
                 box.classList.remove('show');
-                setTimeout(() => { isPlaying = false; processQueue(); }, 1000);
-            }, 2000);
+                // Wait 1s then check for next alert
+                setTimeout(function() {
+                    isPlaying = false;
+                    processQueue();
+                }, 1000);
+            }, 2000); // Keep box visible for 2s after audio finishes
         }
+        
+        // Load voices early
+        window.speechSynthesis.onvoiceschanged = function() { window.speechSynthesis.getVoices(); };
     </script>
 </body>
 </html>
