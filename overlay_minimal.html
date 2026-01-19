@@ -43,7 +43,6 @@
         // 1. Force Load Voices
         function loadVoices() {
             availableVoices = window.speechSynthesis.getVoices();
-            // Debug: Print all available voices to console so you can check them
             console.log("🎤 Available Voices:", availableVoices.map(v => v.name));
         }
         window.speechSynthesis.onvoiceschanged = loadVoices;
@@ -69,50 +68,57 @@
 
         function showAlert(data) {
             var senderName = data.tipper || "Anonymous";
-            document.getElementById('sender').innerText = senderName;
-            document.getElementById('amount').innerText = "₹" + data.amount;
-            if(document.getElementById('message-text')) {
-                document.getElementById('message-text').innerText = `"${data.message}"`;
-            }
+            
+            // UI Updates
+            if(document.getElementById('sender')) document.getElementById('sender').innerText = senderName;
+            if(document.getElementById('amount')) document.getElementById('amount').innerText = "₹" + data.amount;
+            if(document.getElementById('message-text')) document.getElementById('message-text').innerText = `"${data.message}"`;
             
             var box = document.getElementById('alert-box');
             box.classList.add('show');
 
             if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
-                var textToSpeak = `${senderName} sent ${data.amount}. ${data.message}`;
+                
+                // Clean the text to remove special symbols that might confuse TTS
+                var cleanMessage = data.message.replace(/[^a-zA-Z0-9 \u0900-\u097F]/g, ""); 
+                var textToSpeak = `${senderName} sent ${data.amount}. ${cleanMessage}`;
+                
                 var utter = new SpeechSynthesisUtterance(textToSpeak);
 
-                // --- ⚠️ MALE VOICE SELECTOR ⚠️ ---
+                // --- ⚠️ FIX: SMART LANGUAGE & VOICE SELECTOR ⚠️ ---
                 
-                // 1. Check for Hindi Script (Devanagari)
                 var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
                 var targetVoice = null;
 
                 if (hasHindiScript) {
-                    // HINDI: Try 'Hemant' (Male) first, then any Hindi
+                    // === HINDI (Devanagari) ===
+                    // Forces Hindi pronunciation rules
+                    utter.lang = 'hi-IN'; 
                     targetVoice = availableVoices.find(v => v.name.includes('Hemant')) || 
-                                  availableVoices.find(v => v.name.includes('Hindi') && v.name.includes('Male')) ||
                                   availableVoices.find(v => v.lang.includes('hi'));
                 } else {
-                    // HINGLISH: Try 'Ravi' (Male) first
+                    // === HINGLISH / ENGLISH ===
+                    // ⚠️ CRITICAL FIX: Force 'en-IN' so it reads "Pareekshan" as a word, not letters
+                    utter.lang = 'en-IN'; 
+                    
                     targetVoice = availableVoices.find(v => v.name.includes('Ravi')) || 
-                                  availableVoices.find(v => v.name.includes('Mark')) ||  // Fallback to US Male
-                                  availableVoices.find(v => v.name.includes('David')) || // Fallback to US Male
-                                  availableVoices.find(v => v.lang.includes('en-IN'));   // Fallback to any Indian English
+                                  availableVoices.find(v => v.name.includes('Mark')) || 
+                                  availableVoices.find(v => v.lang.includes('en-IN'));
                 }
 
                 if (targetVoice) {
-                    console.log("🗣️ Speaking with:", targetVoice.name);
+                    console.log("🗣️ Voice:", targetVoice.name, "| Lang:", utter.lang);
                     utter.voice = targetVoice;
                 }
 
-                // Settings
-                utter.rate = 1.0; 
-                utter.pitch = 0.9; // Slightly lower pitch for more masculine tone
+                // Make it slightly faster so Hinglish flows better
+                utter.rate = 1.1; 
+                utter.pitch = 1.0;
 
                 utter.onend = () => finishAlert(box);
-                utter.onerror = () => finishAlert(box);
+                utter.onerror = (e) => { console.error("TTS Error:", e); finishAlert(box); };
+                
                 window.speechSynthesis.speak(utter);
             } else { 
                 setTimeout(() => finishAlert(box), 4000); 
