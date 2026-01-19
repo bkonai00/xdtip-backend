@@ -2,55 +2,74 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Stream Stats Widget</title>
+    <title>Stats Rotator</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@500;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@500;900&display=swap');
         
         body { 
             margin: 0; padding: 20px; 
             overflow: hidden; 
-            background: transparent; /* Transparent for OBS */
+            background: transparent; 
             font-family: 'Roboto', sans-serif; 
         }
 
-        /* --- THE WIDGET CONTAINER --- */
+        /* --- CONTAINER --- */
         #stats-container {
-            width: 300px;
-            background: rgba(0, 0, 0, 0.85);
-            border-left: 5px solid #e91e63; /* Pink Accent */
+            width: 320px;
+            background: rgba(0, 0, 0, 0.9);
+            border-left: 5px solid #FFD700; /* Gold Border */
             border-radius: 0 10px 10px 0;
             padding: 15px;
             color: white;
             box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
-            animation: slideIn 1s ease-out;
         }
 
-        @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-
-        /* --- SECTIONS --- */
-        .section-title {
-            font-size: 12px; color: #888; letter-spacing: 1px;
-            text-transform: uppercase; margin-bottom: 5px; font-weight: 700;
+        /* --- ROTATOR SECTION (Blinking) --- */
+        .rotator-box {
+            display: flex; align-items: center; justify-content: space-between;
+            min-height: 50px;
         }
 
-        /* TOP TIPPER STYLE */
-        .top-tipper-box {
-            margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px;
+        .label {
+            font-size: 11px; color: #888; letter-spacing: 1px;
+            text-transform: uppercase; font-weight: 700; margin-bottom: 5px;
         }
-        .crown { font-size: 20px; margin-right: 5px; }
-        .top-name { font-size: 22px; font-weight: 900; color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
-        .top-amount { font-size: 18px; color: #fff; float: right; font-weight: bold; }
 
-        /* LATEST LIST STYLE */
+        .tipper-name {
+            font-size: 24px; font-weight: 900; 
+            color: #FFD700; /* Gold Text */
+            text-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            max-width: 200px;
+            opacity: 0; /* Start hidden for animation */
+            transition: opacity 0.5s ease-in-out;
+        }
+        
+        .tipper-amount {
+            font-size: 20px; color: #fff; font-weight: bold;
+            opacity: 0; /* Start hidden */
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        /* Class to trigger fade in */
+        .visible { opacity: 1 !important; }
+
+        /* RANK BADGE (#1, #2, #3) */
+        .rank-badge {
+            background: #333; color: #aaa; padding: 2px 6px;
+            border-radius: 4px; font-size: 12px; margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        /* --- LATEST LIST (Below) --- */
+        .divider { height: 1px; background: #333; margin: 15px 0; }
         .latest-list { list-style: none; padding: 0; margin: 0; }
         .latest-item { 
             display: flex; justify-content: space-between; 
             font-size: 14px; margin-bottom: 6px; 
-            color: #ddd; padding: 4px 8px; 
-            background: rgba(255,255,255,0.05); border-radius: 4px;
+            color: #ccc; 
         }
-        .latest-name { font-weight: 600; }
         .latest-amt { color: #00ffcc; font-weight: bold; }
 
     </style>
@@ -58,82 +77,111 @@
 <body>
 
     <div id="stats-container">
-        <div class="top-tipper-box">
-            <div class="section-title">👑 All-Time Top Tipper</div>
-            <div>
-                <span class="top-name" id="top-name">Loading...</span>
-                <span class="top-amount" id="top-amount">₹0</span>
+        
+        <div class="label">🏆 TOP SUPPORTERS</div>
+        <div class="rotator-box">
+            <div style="display:flex; align-items:center;">
+                <span id="rank" class="rank-badge">#1</span>
+                <span id="rotator-name" class="tipper-name">Loading...</span>
             </div>
+            <span id="rotator-amount" class="tipper-amount">₹0</span>
         </div>
 
-        <div class="latest-box">
-            <div class="section-title">⚡ Recent Support</div>
-            <ul id="latest-list" class="latest-list">
-                </ul>
-        </div>
+        <div class="divider"></div>
+
+        <div class="label">⚡ RECENT TIPS</div>
+        <ul id="latest-list" class="latest-list">
+            </ul>
     </div>
 
     <script>
         var socket = io(); 
+        var topTippers = []; // Array to store Top 3
+        var currentIndex = 0;
         
         // 1. GET UUID
         var pathParts = window.location.pathname.split('/');
-        // URL is /stats-overlay/UUID
         var uuid = pathParts[pathParts.length - 1]; 
 
-        // 2. CONNECT & FETCH INITIAL DATA
         if (uuid) {
-            console.log("📊 Stats Connected:", uuid);
             socket.emit('join-overlay', uuid);
-            fetchStats(); 
+            fetchStats();
         }
 
+        // 2. FETCH DATA
         async function fetchStats() {
             try {
-                // Call the API we made in previous step
                 const res = await fetch(`/stats/${uuid}`);
                 const data = await res.json();
 
-                // Load Initial Data
-                updateTop(data.top.sender_name, data.top.amount);
+                // Store Top 3 Data
+                topTippers = data.top; 
                 
-                const list = document.getElementById('latest-list');
-                list.innerHTML = "";
-                data.latest.forEach(t => addLatest(t.sender_name, t.amount));
+                // Start Rotation Loop if we have data
+                if (topTippers.length > 0) {
+                    showNextTipper();
+                    setInterval(showNextTipper, 3000); // Change every 3 seconds
+                } else {
+                    document.getElementById('rotator-name').innerText = "No tips yet";
+                    document.getElementById('rotator-name').classList.add('visible');
+                    document.getElementById('rotator-amount').classList.add('visible');
+                }
+
+                // Update Latest List
+                updateLatestList(data.latest);
 
             } catch(e) { console.error(e); }
         }
 
-        // 3. LISTEN FOR LIVE UPDATES
-        socket.on('new-tip', (data) => {
-            // Update List
-            var name = data.tipper || "Anonymous";
-            addLatest(name, data.amount);
+        // 3. ROTATION LOGIC (The Blink Effect)
+        function showNextTipper() {
+            if (topTippers.length === 0) return;
 
-            // Check Top Tipper
-            var currentTop = parseInt(document.getElementById('top-amount').innerText.replace('₹',''));
-            if (parseInt(data.amount) > currentTop) {
-                updateTop(name, data.amount);
-            }
+            var nameEl = document.getElementById('rotator-name');
+            var amtEl = document.getElementById('rotator-amount');
+            var rankEl = document.getElementById('rank');
+
+            // 1. Fade Out
+            nameEl.classList.remove('visible');
+            amtEl.classList.remove('visible');
+
+            // 2. Wait 500ms (Fade Out Time), Then Change Text & Fade In
+            setTimeout(() => {
+                var tipper = topTippers[currentIndex];
+                
+                nameEl.innerText = tipper.sender_name || "Anonymous";
+                amtEl.innerText = "₹" + tipper.amount;
+                rankEl.innerText = "#" + (currentIndex + 1);
+
+                // Fade In
+                nameEl.classList.add('visible');
+                amtEl.classList.add('visible');
+
+                // Prepare next index
+                currentIndex++;
+                if (currentIndex >= topTippers.length) currentIndex = 0;
+
+            }, 500); 
+        }
+
+        // 4. LATEST LIST HELPER
+        function updateLatestList(latestData) {
+            var list = document.getElementById('latest-list');
+            list.innerHTML = "";
+            latestData.forEach(t => {
+                var li = document.createElement('li');
+                li.className = "latest-item";
+                li.innerHTML = `<span>${t.sender_name || 'Anon'}</span> <span class="latest-amt">₹${t.amount}</span>`;
+                list.appendChild(li);
+            });
+        }
+
+        // 5. LIVE UPDATE LISTENER
+        socket.on('new-tip', (data) => {
+            // Re-fetch everything to ensure Top 3 ranking is accurate
+            fetchStats();
         });
 
-        // --- HELPERS ---
-        function updateTop(name, amt) {
-            document.getElementById('top-name').innerText = name || "No One";
-            document.getElementById('top-amount').innerText = "₹" + (amt || 0);
-        }
-
-        function addLatest(name, amt) {
-            var list = document.getElementById('latest-list');
-            var li = document.createElement('li');
-            li.className = "latest-item";
-            li.innerHTML = `<span class="latest-name">${name || 'Anon'}</span> <span class="latest-amt">₹${amt}</span>`;
-            
-            // Add to top
-            list.prepend(li);
-            // Keep only 3
-            if (list.children.length > 3) list.lastElementChild.remove();
-        }
     </script>
 </body>
 </html>
