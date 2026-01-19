@@ -442,6 +442,21 @@ server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
 
+// 3. Get Top 3 Tippers (Updated for Rotation)
+        const { data: top } = await supabase
+            .from('tips')
+            .select('sender_name, amount')
+            .eq('receiver_id', user.id)
+            .order('amount', { ascending: false })
+            .limit(3); // 👈 Changed from 1 to 3, and removed .single()
+
+        res.json({
+            // If no data, send empty array
+            top: top || [], 
+            latest: latest || []
+        });
+
+
 
 
 
