@@ -83,7 +83,7 @@
             if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
                 var cleanMessage = data.message.replace(/[^a-zA-Z0-9 \u0900-\u097F]/g, ""); 
-                var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount}. ${cleanMessage}`);
+                var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount} rupees. ${cleanMessage}`);
                 
                 var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
                 var targetVoice = null;
