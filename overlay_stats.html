@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Stream Stats Widget</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@500;700;900&display=swap');
+        
+        body { 
+            margin: 0; padding: 20px; 
+            overflow: hidden; 
+            background: transparent; /* Transparent for OBS */
+            font-family: 'Roboto', sans-serif; 
+        }
+
+        /* --- THE WIDGET CONTAINER --- */
+        #stats-container {
+            width: 300px;
+            background: rgba(0, 0, 0, 0.85);
+            border-left: 5px solid #e91e63; /* Pink Accent */
+            border-radius: 0 10px 10px 0;
+            padding: 15px;
+            color: white;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
+            animation: slideIn 1s ease-out;
+        }
+
+        @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* --- SECTIONS --- */
+        .section-title {
+            font-size: 12px; color: #888; letter-spacing: 1px;
+            text-transform: uppercase; margin-bottom: 5px; font-weight: 700;
+        }
+
+        /* TOP TIPPER STYLE */
+        .top-tipper-box {
+            margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px;
+        }
+        .crown { font-size: 20px; margin-right: 5px; }
+        .top-name { font-size: 22px; font-weight: 900; color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+        .top-amount { font-size: 18px; color: #fff; float: right; font-weight: bold; }
+
+        /* LATEST LIST STYLE */
+        .latest-list { list-style: none; padding: 0; margin: 0; }
+        .latest-item { 
+            display: flex; justify-content: space-between; 
+            font-size: 14px; margin-bottom: 6px; 
+            color: #ddd; padding: 4px 8px; 
+            background: rgba(255,255,255,0.05); border-radius: 4px;
+        }
+        .latest-name { font-weight: 600; }
+        .latest-amt { color: #00ffcc; font-weight: bold; }
+
+    </style>
+</head>
+<body>
+
+    <div id="stats-container">
+        <div class="top-tipper-box">
+            <div class="section-title">👑 All-Time Top Tipper</div>
+            <div>
+                <span class="top-name" id="top-name">Loading...</span>
+                <span class="top-amount" id="top-amount">₹0</span>
+            </div>
+        </div>
+
+        <div class="latest-box">
+            <div class="section-title">⚡ Recent Support</div>
+            <ul id="latest-list" class="latest-list">
+                </ul>
+        </div>
+    </div>
+
+    <script>
+        var socket = io(); 
+        
+        // 1. GET UUID
+        var pathParts = window.location.pathname.split('/');
+        // URL is /stats-overlay/UUID
+        var uuid = pathParts[pathParts.length - 1]; 
+
+        // 2. CONNECT & FETCH INITIAL DATA
+        if (uuid) {
+            console.log("📊 Stats Connected:", uuid);
+            socket.emit('join-overlay', uuid);
+            fetchStats(); 
+        }
+
+        async function fetchStats() {
+            try {
+                // Call the API we made in previous step
+                const res = await fetch(`/stats/${uuid}`);
+                const data = await res.json();
+
+                // Load Initial Data
+                updateTop(data.top.sender_name, data.top.amount);
+                
+                const list = document.getElementById('latest-list');
+                list.innerHTML = "";
+                data.latest.forEach(t => addLatest(t.sender_name, t.amount));
+
+            } catch(e) { console.error(e); }
+        }
+
+        // 3. LISTEN FOR LIVE UPDATES
+        socket.on('new-tip', (data) => {
+            // Update List
+            var name = data.tipper || "Anonymous";
+            addLatest(name, data.amount);
+
+            // Check Top Tipper
+            var currentTop = parseInt(document.getElementById('top-amount').innerText.replace('₹',''));
+            if (parseInt(data.amount) > currentTop) {
+                updateTop(name, data.amount);
+            }
+        });
+
+        // --- HELPERS ---
+        function updateTop(name, amt) {
+            document.getElementById('top-name').innerText = name || "No One";
+            document.getElementById('top-amount').innerText = "₹" + (amt || 0);
+        }
+
+        function addLatest(name, amt) {
+            var list = document.getElementById('latest-list');
+            var li = document.createElement('li');
+            li.className = "latest-item";
+            li.innerHTML = `<span class="latest-name">${name || 'Anon'}</span> <span class="latest-amt">₹${amt}</span>`;
+            
+            // Add to top
+            list.prepend(li);
+            // Keep only 3
+            if (list.children.length > 3) list.lastElementChild.remove();
+        }
+    </script>
+</body>
+</html>
