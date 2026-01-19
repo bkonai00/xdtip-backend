@@ -278,11 +278,50 @@ app.post('/upload-logo', authenticateToken, upload.single('logo'), async (req, r
     }
 });
 
-// I. Serve Overlay HTML (SIMPLIFIED FOR REBUILD)
+// ==========================================
+// I. SERVE OVERLAY (Dynamic Theme Selector)
+// ==========================================
 app.get('/overlay/:token', async (req, res) => {
-    // We ignore the theme for now to ensure IT WORKS.
-    // It will always serve the new Master 'overlay.html' file.
-    res.sendFile(path.join(__dirname, 'overlay.html'));
+    const { token } = req.params;
+    
+    // 1. Check which theme the user selected in DB
+    const { data: user } = await supabase
+        .from('users')
+        .select('overlay_theme')
+        .eq('obs_token', token)
+        .single();
+
+    // Default to 'overlay.html' (Classic)
+    let fileToSend = 'overlay.html'; 
+
+    if (user) {
+        if (user.overlay_theme === 'neon') fileToSend = 'overlay_neon.html';
+        if (user.overlay_theme === 'minimal') fileToSend = 'overlay_minimal.html';
+    }
+
+    // 2. Serve the correct file
+    res.sendFile(path.join(__dirname, fileToSend));
+});
+
+// ==========================================
+// M. TEST ALERT (New Feature)
+// ==========================================
+app.post('/test-alert', authenticateToken, (req, res) => {
+    const username = req.user.username;
+
+    // Create a Fake Tip Object
+    const fakeTip = {
+        tipper: "Test Bot",
+        amount: 69,
+        message: "This is a test alert! If you hear this, it works. 🔥"
+    };
+
+    console.log(`🚀 Sending Test Alert to room: ${username}`);
+    
+    // Send to the User's Room (The Overlay listens to this)
+    io.to(username.toLowerCase()).emit('new-tip', fakeTip);
+
+    res.json({ success: true, message: "Test Alert Sent!" });
 });
 
 // J. Request Withdrawal
@@ -401,5 +440,6 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
