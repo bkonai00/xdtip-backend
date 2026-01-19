@@ -116,26 +116,14 @@
             console.error("❌ Connection failed. Check if app.xdfun.in is online.", err);
         });
 
-        // -------------------------------------------------
-        // 3. HANDLE INCOMING TIPS
-        // -------------------------------------------------
-        socket.on('new-tip', (data) => {
-            console.log("New Tip:", data);
-            queue.push(data);
-            processQueue();
-        });
+       function showAlert(data) {
+            // 1. SMART NAME DETECTION
+            // Check if backend sent 'tipper', 'sender', OR 'username'. 
+            // If all are missing, fall back to "Anonymous".
+            const senderName = data.tipper || data.sender || data.username || "Anonymous";
 
-        function processQueue() {
-            if (isPlaying || queue.length === 0) return;
-            isPlaying = true;
-            
-            const data = queue.shift();
-            showAlert(data);
-        }
-
-        function showAlert(data) {
             // A. UPDATE VISUALS
-            document.getElementById('sender').innerText = data.tipper || "Anonymous";
+            document.getElementById('sender').innerText = senderName;
             document.getElementById('amount').innerText = "₹" + data.amount;
             document.getElementById('message-text').innerText = `"${data.message}"`;
             
@@ -144,7 +132,8 @@
             box.classList.add('show');
 
             // C. PLAY AUDIO (TTS)
-            const speechText = `${data.tipper} sent ${data.amount} rupees. ${data.message}`;
+            // Use the detected 'senderName' here too
+            const speechText = `${senderName} sent ${data.amount} rupees. ${data.message}`;
 
             speakText(speechText, () => {
                 setTimeout(() => {
@@ -156,7 +145,6 @@
                 }, 2000); 
             });
         }
-
         // -------------------------------------------------
         // 4. TTS FUNCTION
         // -------------------------------------------------
