@@ -95,8 +95,9 @@
                     // 2. Microsoft Ravi (Good alternative)
                     // 3. Google English India (Best if using Chrome Browser Source)
                     // 4. Any English (India)
-                    targetVoice = availableVoices.find(v => v.name.includes('Heera')) || 
+                    targetVoice = availableVoices.find(v => v.name.includes('Google') && v.lang.includes('hi-IN')) ||
                                   availableVoices.find(v => v.name.includes('Ravi')) || 
+                                  availableVoices.find(v => v.name.includes('Heera')) ||
                                   availableVoices.find(v => v.name.includes('Google') && v.lang.includes('en-IN')) ||
                                   availableVoices.find(v => v.lang.includes('en-IN'));
                 }
