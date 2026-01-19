@@ -1,11 +1,106 @@
-function showNextTipper() {
-            if (topTippers.length === 0) return;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Classic Stats</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@500;900&display=swap');
+        
+        body { 
+            margin: 0; padding: 20px; 
+            overflow: hidden; 
+            background: transparent; 
+            font-family: 'Roboto', sans-serif; 
+        }
 
+        #stats-container {
+            width: 320px;
+            background: rgba(0, 0, 0, 0.9);
+            border-left: 5px solid #FFD700;
+            border-radius: 0 10px 10px 0;
+            padding: 15px;
+            color: white;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
+        }
+
+        .label { font-size: 11px; color: #888; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; margin-bottom: 5px; }
+
+        .rotator-box { display: flex; align-items: center; justify-content: space-between; min-height: 50px; }
+
+        .tipper-name {
+            font-size: 24px; font-weight: 900; color: #FFD700; text-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;
+            opacity: 0; transition: opacity 0.5s ease-in-out;
+        }
+        
+        .tipper-amount {
+            font-size: 20px; color: #fff; font-weight: bold;
+            opacity: 0; transition: opacity 0.5s ease-in-out;
+        }
+
+        .visible { opacity: 1 !important; }
+        .divider { height: 1px; background: #333; margin: 15px 0; }
+        .latest-list { list-style: none; padding: 0; margin: 0; }
+        .latest-item { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; color: #ccc; }
+        .latest-amt { color: #00ffcc; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="stats-container">
+        <div class="label">🏆 TOP SUPPORTERS</div>
+        <div class="rotator-box">
+            <div style="display:flex; align-items:center;">
+                <span id="rank" style="margin-right:8px; font-size:12px; color:#aaa;">#1</span>
+                <span id="rotator-name" class="tipper-name">Loading...</span>
+            </div>
+            <span id="rotator-amount" class="tipper-amount">₹0</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="label">⚡ RECENT TIPS</div>
+        <ul id="latest-list" class="latest-list"></ul>
+    </div>
+
+    <script>
+        var socket = io(); 
+        var topTippers = [];
+        var currentIndex = 0;
+        
+        var pathParts = window.location.pathname.split('/');
+        var uuid = pathParts[pathParts.length - 1]; 
+
+        if (uuid) {
+            socket.emit('join-overlay', uuid);
+            fetchStats();
+        }
+
+        async function fetchStats() {
+            try {
+                const res = await fetch(`/stats/${uuid}`);
+                const data = await res.json();
+                topTippers = data.top; 
+                
+                if (topTippers.length > 0) {
+                    showNextTipper();
+                    setInterval(showNextTipper, 3000); 
+                } else {
+                    document.getElementById('rotator-name').innerText = "No tips yet";
+                    document.getElementById('rotator-name').classList.add('visible');
+                    document.getElementById('rotator-amount').classList.add('visible');
+                }
+                updateLatestList(data.latest);
+            } catch(e) { console.error(e); }
+        }
+
+        function showNextTipper() {
+            if (topTippers.length === 0) return;
             var nameEl = document.getElementById('rotator-name');
             var amtEl = document.getElementById('rotator-amount');
             var rankEl = document.getElementById('rank');
 
-            // 1. Fade Out
             nameEl.classList.remove('visible');
             amtEl.classList.remove('visible');
 
@@ -16,24 +111,34 @@ function showNextTipper() {
                 nameEl.innerText = tipper.sender_name || "Anonymous";
                 amtEl.innerText = "₹" + tipper.amount;
 
-                // ✨ SPECIAL ICON FOR #1 ✨
                 if (rank === 1) {
                     rankEl.innerHTML = "👑 #1"; 
-                    rankEl.style.color = "#FFD700"; // Gold color for #1
-                    rankEl.style.fontSize = "16px"; // Bigger
+                    rankEl.style.color = "#FFD700"; 
                 } else {
                     rankEl.innerHTML = "#" + rank;
-                    rankEl.style.color = "#aaa";    // Grey for others
-                    rankEl.style.fontSize = "12px"; // Normal
+                    rankEl.style.color = "#aaa";    
                 }
 
-                // Fade In
                 nameEl.classList.add('visible');
                 amtEl.classList.add('visible');
 
-                // Next
                 currentIndex++;
                 if (currentIndex >= topTippers.length) currentIndex = 0;
-
             }, 500); 
         }
+
+        function updateLatestList(latestData) {
+            var list = document.getElementById('latest-list');
+            list.innerHTML = "";
+            latestData.forEach(t => {
+                var li = document.createElement('li');
+                li.className = "latest-item";
+                li.innerHTML = `<span>${t.sender_name || 'Anon'}</span> <span class="latest-amt">₹${t.amount}</span>`;
+                list.appendChild(li);
+            });
+        }
+
+        socket.on('new-tip', () => fetchStats());
+    </script>
+</body>
+</html>
