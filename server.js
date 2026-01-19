@@ -61,17 +61,15 @@ io.on('connection', (socket) => {
     });
 
     // 2. Overlay Join (The Fix)
-    // We translate the "Token" (from URL) into a "Username"
     socket.on('join-overlay', async (token) => {
         if (!token) return;
 
         try {
             // Ask Database: "Who owns this token?"
-            // We select 'username' because that is where the /tip route sends alerts
             const { data: user } = await supabase
                 .from('users')
-                .select('username') // 👈 Look up the name
-                .eq('obs_token', token) // 👈 Match the token from URL
+                .select('username') 
+                .eq('obs_token', token) 
                 .single();
 
             if (user && user.username) {
@@ -194,7 +192,15 @@ app.post('/tip', authenticateToken, async (req, res) => {
 
         await supabase.rpc('decrement_balance', { user_id: senderId, amount: amount });
         await supabase.rpc('increment_balance', { user_id: receiver.id, amount: creatorShare });
-        await supabase.from('tips').insert([{ sender_id: senderId, receiver_id: receiver.id, amount, message }]);
+        
+        // Save Tip (Make sure your 'tips' table has a 'sender_name' column if you want stats to work perfectly!)
+        await supabase.from('tips').insert([{ 
+            sender_id: senderId, 
+            receiver_id: receiver.id, 
+            amount, 
+            message,
+            sender_name: req.user.username // Optional: if you added this column
+        }]);
 
         // -----------------------------------------------------
         // ⚠️ FIXED ALERT LOGIC
@@ -453,7 +459,7 @@ app.get('/stats/:token', async (req, res) => {
         // 2. Get Latest 3 Tips (For the list)
         const { data: latest } = await supabase
             .from('tips')
-            .select('sender_name, amount') // Ensure your column is named 'sender_name' or 'tipper'
+            .select('sender_name, amount') // Ensure your column is named 'sender_name'
             .eq('receiver_id', user.id)
             .order('created_at', { ascending: false })
             .limit(3);
@@ -497,7 +503,7 @@ app.get('/stats-overlay/:token', async (req, res) => {
         if (user.overlay_theme === 'neon') fileToSend = 'overlay_stats_neon.html';
         if (user.overlay_theme === 'minimal') fileToSend = 'overlay_stats_minimal.html';
         // VIP Theme uses the Gold/Classic stats because it matches perfectly
-        if (user.overlay_theme === 'vip') fileToSend = 'overlay_stats_vip.html';
+        if (user.overlay_theme === 'vip') fileToSend = 'overlay_stats.html';
     }
 
     // 2. Serve the correct file
@@ -511,25 +517,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
-
-// 3. Get Top 3 Tippers (Updated for Rotation)
-        const { data: top } = await supabase
-            .from('tips')
-            .select('sender_name, amount')
-            .eq('receiver_id', user.id)
-            .order('amount', { ascending: false })
-            .limit(3); // 👈 Changed from 1 to 3, and removed .single()
-
-        res.json({
-            // If no data, send empty array
-            top: top || [], 
-            latest: latest || []
-        });
-
-
-
-
-
-
-
-
