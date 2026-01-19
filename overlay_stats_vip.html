@@ -14,58 +14,43 @@
             font-family: 'Montserrat', sans-serif; 
         }
 
-        /* --- CONTAINER --- */
         #vip-container {
             width: 500px;
             display: flex;
             flex-direction: column;
-            gap: 8px; /* Gap between top and bottom bars */
+            gap: 8px;
         }
 
-        /* --- THE BAR STYLE (Black Pill with Gold Border) --- */
         .stat-bar {
             background: #000;
-            border: 2px solid #FFD700; /* Gold Border */
-            border-radius: 50px; /* Fully rounded pill shape */
+            border: 2px solid #FFD700; 
+            border-radius: 50px; 
             padding: 8px 25px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            height: 40px; /* Fixed height */
+            height: 40px; 
         }
 
-        /* --- LEFT LABEL (e.g. #1 XD-Tipper) --- */
-        .label-text {
-            font-size: 18px;
-            font-weight: 800;
-            color: #fff;
-            text-transform: uppercase;
-        }
+        .label-text { font-size: 18px; font-weight: 800; color: #fff; text-transform: uppercase; }
 
-        /* --- RIGHT VALUE (Name & Amount) --- */
         .value-text {
-            font-size: 20px;
-            font-weight: 900;
-            color: #FFD700; /* Gold Text */
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
-            white-space: nowrap;
+            font-size: 20px; font-weight: 900; color: #FFD700; 
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.4); white-space: nowrap;
         }
 
-        /* --- ANIMATION FOR BOTTOM BAR --- */
         .fade-in { animation: fadeIn 0.5s forwards; }
         .fade-out { animation: fadeOut 0.5s forwards; }
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-5px); } }
-
     </style>
 </head>
 <body>
 
     <div id="vip-container">
-        
         <div class="stat-bar">
             <span class="label-text">#1 XD-TIPPER</span>
             <span id="top-one-name" class="value-text">Loading...</span>
@@ -73,9 +58,8 @@
 
         <div class="stat-bar">
             <span class="label-text">!XDTIP</span>
-            <span id="rotating-text" class="value-text">Waiting for tips...</span>
+            <span id="rotating-text" class="value-text">Waiting...</span>
         </div>
-
     </div>
 
     <script>
@@ -83,7 +67,6 @@
         var topTippers = [];
         var currentIndex = 0;
         
-        // 1. GET UUID & CONNECT
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
 
@@ -92,34 +75,28 @@
             fetchStats();
         }
 
-        // 2. FETCH DATA
         async function fetchStats() {
             try {
                 const res = await fetch(`/stats/${uuid}`);
                 const data = await res.json();
                 topTippers = data.top; 
-
                 updateDisplay();
-
             } catch(e) { console.error(e); }
         }
 
-        // 3. UPDATE LOGIC
         function updateDisplay() {
-            if (topTippers.length === 0) {
+            if (!topTippers || topTippers.length === 0) {
                 document.getElementById('top-one-name').innerText = "No One Yet";
                 document.getElementById('rotating-text').innerText = "Be the first!";
                 return;
             }
 
-            // A. SET TOP BAR (Always #1)
+            // Top Bar Fixed
             var numberOne = topTippers[0];
             document.getElementById('top-one-name').innerText = numberOne.sender_name.toUpperCase();
 
-            // B. START ROTATION FOR BOTTOM BAR
-            // Show first immediately
+            // Start Rotation
             rotateBottomBar();
-            // Then rotate every 3 seconds
             setInterval(rotateBottomBar, 3000); 
         }
 
@@ -127,34 +104,22 @@
             if (topTippers.length === 0) return;
 
             var el = document.getElementById('rotating-text');
-            
-            // 1. Fade Out
             el.classList.remove('fade-in');
             el.classList.add('fade-out');
 
             setTimeout(() => {
-                // 2. Change Text
                 var tipper = topTippers[currentIndex];
-                // Format: "NAME - ₹AMOUNT"
                 el.innerText = `${tipper.sender_name} - ₹${tipper.amount}`;
                 
-                // 3. Fade In
                 el.classList.remove('fade-out');
                 el.classList.add('fade-in');
 
-                // 4. Next Index
                 currentIndex++;
                 if (currentIndex >= topTippers.length) currentIndex = 0;
-
-            }, 500); // Wait for fade out
+            }, 500); 
         }
 
-        // 4. LIVE UPDATE
-        socket.on('new-tip', () => {
-            // Reload data silently when a new tip comes in
-            fetchStats(); 
-        });
-
+        socket.on('new-tip', () => fetchStats());
     </script>
 </body>
 </html>
