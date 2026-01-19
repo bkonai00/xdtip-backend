@@ -181,8 +181,10 @@ app.post('/tip', authenticateToken, async (req, res) => {
         await supabase.rpc('increment_balance', { user_id: receiver.id, amount: creatorShare });
         await supabase.from('tips').insert([{ sender_id: senderId, receiver_id: receiver.id, amount, message }]);
 
+        // ... (inside app.post('/tip') ... after database inserts) ...
+
         // -----------------------------------------------------
-        // ⚠️ ALERT LOGIC (THE FIX)
+        // ⚠️ FIXED ALERT LOGIC: SEND TO BOTH ROOMS
         // -----------------------------------------------------
         const alertData = {
             tipper: req.user.username, // Real Sender Name
@@ -191,20 +193,16 @@ app.post('/tip', authenticateToken, async (req, res) => {
         };
 
         // 1. Send to Username Room (For Dashboard)
-        io.to(receiverUsername.toLowerCase()).emit('new-tip', alertData);
+        io.to(receiverUsername).emit('new-tip', alertData);
 
-        // 2. Send to UUID Room (For Overlay Link)
-        // We use receiver.id because that is what the UUID link uses
-        if (receiver.id) {
-            io.to(receiver.id).emit('new-tip', alertData); 
+        // 2. Send to User ID Room (For Overlay Link) 
+        // ⚠️ THIS IS THE MISSING PIECE!
+        if (receiver && receiver.id) {
+            console.log(`Sending alert to UUID room: ${receiver.id}`); // Debug log
+            io.to(receiver.id).emit('new-tip', alertData);
         }
 
         res.json({ success: true, message: `Sent ${amount} tokens!` });
-    } catch (err) {
-        console.error("Tip Error:", err);
-        res.status(500).json({ error: err.message });
-    }
-});
 // G. Get Tip History
 app.get('/history', authenticateToken, async (req, res) => {
     try {
@@ -403,6 +401,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
