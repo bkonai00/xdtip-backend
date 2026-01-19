@@ -477,6 +477,33 @@ app.get('/stats/:token', async (req, res) => {
     }
 });
 
+// ==========================================
+// S. SERVE STATS OVERLAY (Dynamic Theme)
+// ==========================================
+app.get('/stats-overlay/:token', async (req, res) => {
+    const { token } = req.params;
+
+    // 1. Check which theme the user selected in DB
+    const { data: user } = await supabase
+        .from('users')
+        .select('overlay_theme')
+        .eq('obs_token', token)
+        .single();
+
+    // Default to 'overlay_stats.html' (Classic/Gold)
+    let fileToSend = 'overlay_stats.html'; 
+
+    if (user) {
+        if (user.overlay_theme === 'neon') fileToSend = 'overlay_stats_neon.html';
+        if (user.overlay_theme === 'minimal') fileToSend = 'overlay_stats_minimal.html';
+        // VIP Theme uses the Gold/Classic stats because it matches perfectly
+        if (user.overlay_theme === 'vip') fileToSend = 'overlay_stats_vip.html';
+    }
+
+    // 2. Serve the correct file
+    res.sendFile(path.join(__dirname, fileToSend));
+});
+
 // ------------------------------------------
 // START SERVER
 // ------------------------------------------
@@ -498,6 +525,7 @@ server.listen(PORT, () => {
             top: top || [], 
             latest: latest || []
         });
+
 
 
 
