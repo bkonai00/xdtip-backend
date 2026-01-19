@@ -297,6 +297,7 @@ app.get('/overlay/:token', async (req, res) => {
     if (user) {
         if (user.overlay_theme === 'neon') fileToSend = 'overlay_neon.html';
         if (user.overlay_theme === 'minimal') fileToSend = 'overlay_minimal.html';
+        if (user.overlay_theme === 'vip') fileToSend = 'overlay_vip.html';
     }
 
     // 2. Serve the correct file
@@ -440,6 +441,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
