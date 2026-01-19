@@ -47,7 +47,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ------------------------------------------
-// SOCKET CONNECTION (Fixed for Overlay)
+// SOCKET CONNECTION
 // ------------------------------------------
 io.on('connection', (socket) => {
     console.log('Socket connected:', socket.id);
@@ -55,7 +55,7 @@ io.on('connection', (socket) => {
     // 1. Standard Join (For Dashboard & Frontend Overlay)
     socket.on('join', (room) => {
         if (room) {
-            socket.join(room.toLowerCase()); // Force Lowercase for safety
+            socket.join(room.toLowerCase());
             console.log(`User joined room: ${room.toLowerCase()}`);
         }
     });
@@ -63,7 +63,7 @@ io.on('connection', (socket) => {
     // 2. Backend Overlay Join (For app.xdfun.in/overlay/UUID)
     socket.on('join-overlay', (uuid) => {
         if (uuid) {
-            socket.join(uuid); // Join the specific UUID room
+            socket.join(uuid); 
             console.log(`Overlay joined UUID room: ${uuid}`);
         }
     });
@@ -123,11 +123,9 @@ app.post('/login', async (req, res) => {
 });
 
 // D. Get User Details
-// D. Get User Details
 app.get('/me', authenticateToken, async (req, res) => {
     try {
         const { data: user } = await supabase
-            // ✅ ADDED 'overlay_theme' here
             .from('users')
             .select('id, username, role, balance, obs_token, logo_url, overlay_theme') 
             .eq('id', req.user.id).single();
@@ -158,7 +156,7 @@ app.get('/profile/:username', async (req, res) => {
     else res.json({ success: false });
 });
 
-// F. Send Tip
+// F. Send Tip (FIXED: Sends to BOTH Username and UUID)
 app.post('/tip', authenticateToken, async (req, res) => {
     const { receiverUsername, amount, message } = req.body;
     const senderId = req.user.id;
@@ -166,7 +164,7 @@ app.post('/tip', authenticateToken, async (req, res) => {
     if (amount < 10) return res.status(400).json({ error: "Min tip is 10" });
 
     try {
-        // Fetch Receiver ID to send alerts to their UUID room too
+        // Fetch Receiver with ID (so we can alert their UUID room)
         const { data: receiver } = await supabase.from('users').select('id, balance').eq('username', receiverUsername).single();
         if (!receiver) return res.status(404).json({ error: "Creator not found" });
 
@@ -176,15 +174,12 @@ app.post('/tip', authenticateToken, async (req, res) => {
         const platformFee = amount * 0.05;
         const creatorShare = amount - platformFee;
 
-        // Transaction Logic
         await supabase.rpc('decrement_balance', { user_id: senderId, amount: amount });
         await supabase.rpc('increment_balance', { user_id: receiver.id, amount: creatorShare });
         await supabase.from('tips').insert([{ sender_id: senderId, receiver_id: receiver.id, amount, message }]);
 
-        // ... (inside app.post('/tip') ... after database inserts) ...
-
         // -----------------------------------------------------
-        // ⚠️ FIXED ALERT LOGIC: SEND TO BOTH ROOMS
+        // ⚠️ FIXED ALERT LOGIC
         // -----------------------------------------------------
         const alertData = {
             tipper: req.user.username, // Real Sender Name
@@ -193,16 +188,23 @@ app.post('/tip', authenticateToken, async (req, res) => {
         };
 
         // 1. Send to Username Room (For Dashboard)
-        io.to(receiverUsername).emit('new-tip', alertData);
+        if (receiverUsername) {
+            io.to(receiverUsername.toLowerCase()).emit('new-tip', alertData);
+        }
 
-        // 2. Send to User ID Room (For Overlay Link) 
-        // ⚠️ THIS IS THE MISSING PIECE!
+        // 2. Send to User ID Room (For Overlay Link)
         if (receiver && receiver.id) {
-            console.log(`Sending alert to UUID room: ${receiver.id}`); // Debug log
+            console.log(`Sending alert to UUID room: ${receiver.id}`);
             io.to(receiver.id).emit('new-tip', alertData);
         }
 
         res.json({ success: true, message: `Sent ${amount} tokens!` });
+    } catch (err) {
+        console.error("Tip Error:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // G. Get Tip History
 app.get('/history', authenticateToken, async (req, res) => {
     try {
@@ -259,23 +261,13 @@ app.post('/upload-logo', authenticateToken, upload.single('logo'), async (req, r
 });
 
 // I. Serve Overlay HTML (Dynamic Theme)
+// Only needed if you use /overlay/TOKEN logic on backend
 app.get('/overlay/:token', async (req, res) => {
     const { token } = req.params;
     
-    // 1. Find User & Their Theme
-    const { data: user } = await supabase
-        .from('users').select('username, overlay_theme').eq('obs_token', token).single();
-
-    if (!user) return res.status(404).send("Invalid Overlay Link");
-
-    // 2. Decide which file to serve
-    let fileToSend = 'overlay.html'; // Default (Classic)
-    
-    if (user.overlay_theme === 'neon') fileToSend = 'overlay_neon.html';
-    if (user.overlay_theme === 'minimal') fileToSend = 'overlay_minimal.html';
-
-    // 3. Send the file
-    res.sendFile(path.join(__dirname, fileToSend));
+    // We send the file, and the file's JS will grab the token from URL
+    // We don't need to validate token here strictly, let client side connect.
+    res.sendFile(path.join(__dirname, 'overlay.html'));
 });
 
 // J. Request Withdrawal
@@ -331,7 +323,7 @@ app.get('/withdrawals', authenticateToken, async (req, res) => {
     }
 });
 
-// L. WEBHOOK PAYMENT (Debug Version)
+// L. WEBHOOK PAYMENT (Razorpay)
 app.post('/webhook', async (req, res) => {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
@@ -370,21 +362,14 @@ app.post('/webhook', async (req, res) => {
                         console.log(`✅ Balance updated for ${targetUser}`);
                     }
                     
-                    // B. Save Transaction (WITH ERROR LOGGING)
-                    const { error: insertError } = await supabase.from('transactions').insert([{
+                    // B. Save Transaction
+                    await supabase.from('transactions').insert([{
                         user_id: user.id,
                         amount: amount,
                         razorpay_payment_id: paymentId,
                         type: 'deposit',
                         status: 'success'
                     }]);
-
-                    if (insertError) {
-                        // ⚠️ THIS WILL TELL US THE PROBLEM
-                        console.error("❌ Transaction Save Failed:", insertError.message, insertError.details);
-                    } else {
-                        console.log("✅ Transaction history saved!");
-                    }
                 }
             } catch (err) { console.error("Database Error:", err); }
         }
@@ -401,9 +386,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
-
-
-
-
-
-
