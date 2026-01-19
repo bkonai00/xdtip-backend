@@ -167,7 +167,7 @@ app.post('/tip', authenticateToken, async (req, res) => {
         const { data: sender } = await supabase.from('users').select('balance').eq('id', senderId).single();
         if (sender.balance < amount) return res.status(400).json({ error: "Insufficient balance" });
 
-        const platformFee = amount * 0.08;
+        const platformFee = amount * 0.05;
         const creatorShare = amount - platformFee;
 
         await supabase.rpc('decrement_balance', { user_id: senderId, amount: amount });
@@ -385,6 +385,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
