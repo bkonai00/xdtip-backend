@@ -2,189 +2,99 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>xdtip Overlay</title>
-    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Overlay</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@800&display=swap');
-
-        body { 
-            margin: 0; padding: 0; overflow: hidden; 
-            background: transparent; /* Transparent for OBS */
-            font-family: 'Inter', sans-serif;
-            display: flex; justify-content: center; align-items: center;
-            height: 100vh;
-        }
-
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+        body { margin: 0; padding: 0; overflow: hidden; background: transparent; height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Orbitron', sans-serif; }
+        
         #alert-box {
-            text-align: center;
-            opacity: 0; /* Hidden by default */
-            transform: translateY(50px);
-            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-align: center; opacity: 0; transform: scale(0.8);
+            transition: all 0.5s;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 30px;
+            border: 2px solid #00ffcc;
+            box-shadow: 0 0 20px #00ffcc;
+            border-radius: 15px;
+            min-width: 450px;
         }
-
-        #alert-box.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .alert-image {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            border: 5px solid #ff3b3b;
-            box-shadow: 0 0 30px rgba(255, 59, 59, 0.6);
-            object-fit: cover;
-            margin-bottom: 15px;
-            animation: pulse 2s infinite;
-        }
-
-        .alert-text {
-            font-size: 48px;
-            color: white;
-            text-shadow: 0 4px 10px rgba(0,0,0,0.8);
-            margin: 0;
-        }
-
-        .highlight { color: #ff3b3b; }
-
-        .message {
-            font-size: 28px;
-            color: #ddd;
-            margin-top: 10px;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
-            max-width: 600px;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 59, 0.7); }
-            70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(255, 59, 59, 0); }
-            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 59, 0); }
-        }
+        #alert-box.show { opacity: 1; transform: scale(1); }
+        .alert-text { font-size: 32px; color: #fff; margin: 0; text-transform: uppercase; }
+        .highlight { color: #00ffcc; } 
+        .amount { color: #ff00ff; font-size: 40px; display: block; margin: 10px 0;}
+        .message { font-size: 24px; color: #eee; margin-top: 15px; font-style: italic; border-top: 1px solid #333; padding-top: 15px;}
+        .alert-image { width: 120px; height: 120px; border: 3px solid #fff; border-radius: 10px; margin-bottom: 15px; object-fit: cover;}
     </style>
 </head>
 <body>
-
     <div id="alert-box">
-        <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMjR4ZGV4ZGV4ZGV4ZGV4ZGV4ZGV4ZGV4ZGV4ZGV4ZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/LdOyjZ7io5Msw/giphy.gif" class="alert-image">
-        
-        <h1 class="alert-text"><span id="sender" class="highlight">Someone</span> sent <span id="amount">100</span>!</h1>
-        
-        <p class="message" id="message-text">This is an amazing message!</p>
+        <img id="alert-image" src="https://media.giphy.com/media/xUPGGDNsLvqsBOhuU0/giphy.gif" class="alert-image">
+        <h1 class="alert-text"><span id="sender" class="highlight">USER</span> <br> DONATED <br> <span id="amount" class="amount">500</span></h1>
+        <p class="message" id="message-text">Message goes here...</p>
     </div>
 
     <script>
-        // --- CONFIGURATION ---
-        const socket = io(); 
-        const queue = [];    
-        let isPlaying = false;
-        let availableVoices = [];
+        // 1. CONNECT
+        var socket = io(); 
+        var queue = [];
+        var isPlaying = false;
 
-        // Load voices immediately so they are ready
-        window.speechSynthesis.onvoiceschanged = () => {
-            availableVoices = window.speechSynthesis.getVoices();
-            console.log("Voices loaded:", availableVoices.length);
-        };
+        // 2. GET UUID FROM URL
+        var pathParts = window.location.pathname.split('/');
+        var uuid = pathParts[pathParts.length - 1]; 
 
-        // 1. Join Room
-        const token = window.location.pathname.split('/').pop();
-        if(token) {
-            console.log("Joining Overlay for token:", token);
-            socket.emit('join-overlay', token);
+        if (uuid && uuid !== "overlay") {
+            console.log("✅ Joining Overlay Room:", uuid);
+            socket.emit('join-overlay', uuid);
+        } else {
+            console.error("❌ No UUID found");
+            document.body.innerHTML = "<h2 style='color:white'>Error: No UUID Found</h2>";
         }
 
-        // 2. Listen for Tips
+        // 3. LISTEN
         socket.on('new-tip', (data) => {
-            console.log("New Tip Received:", data);
+            console.log("🔔 Tip:", data);
             queue.push(data);
             processQueue();
         });
 
-        // 3. Process Queue
         function processQueue() {
             if (isPlaying || queue.length === 0) return;
-
             isPlaying = true;
-            const data = queue.shift();
+            var data = queue.shift();
             showAlert(data);
         }
 
-        // 4. Show Visuals & Play TTS
         function showAlert(data) {
-            // ... visual update code ...
+            var senderName = data.tipper || data.sender || data.username || "Anonymous";
+            document.getElementById('sender').innerText = senderName;
+            document.getElementById('amount').innerText = "₹" + data.amount;
+            document.getElementById('message-text').innerText = `"${data.message}"`;
 
-            const box = document.getElementById('alert-box');
+            var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // ✅ COMBINE THEM CLEARLY
-            // We use a "comma" instead of a period for a more natural pause
-            const fullText = `${data.sender} sent ${data.amount} tokens, says: ${data.message}`;
-
-            speakText(fullText, () => {
-                setTimeout(() => {
-                    box.classList.remove('show'); 
-                    setTimeout(() => {
-                        isPlaying = false;
-                        processQueue(); 
-                    }, 1000); 
-                }, 2000); 
-            });
+            // TTS
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+                var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount}. ${data.message}`);
+                var voices = window.speechSynthesis.getVoices();
+                utter.voice = voices.find(v => v.lang.includes('en-IN')) || voices[0];
+                utter.onend = () => { finishAlert(box); };
+                utter.onerror = () => { finishAlert(box); };
+                window.speechSynthesis.speak(utter);
+            } else {
+                setTimeout(() => { finishAlert(box); }, 4000);
+            }
         }
 
-        // --- TTS FUNCTION (HINDI / HINGLISH SUPPORT) ---
-        // --- GLOBAL VARIABLES (To prevent audio cutting off) ---
-        const socket = io(); 
-        const queue = [];    
-        let isPlaying = false;
-        let currentUtterance = null; // ✅ GLOBAL VARIABLE (Fixes the bug)
-
-        // ... (Keep your loadVoices and other logic same) ...
-
-        // --- UPDATED TTS FUNCTION ---
-        function speakText(text, callback) {
-            if (!window.speechSynthesis) {
-                console.error("No TTS Support");
-                return callback();
-            }
-
-            // Cancel old audio
-            window.speechSynthesis.cancel();
-
-            // ✅ ASSIGN TO GLOBAL VARIABLE
-            currentUtterance = new SpeechSynthesisUtterance(text);
-            
-            const voices = window.speechSynthesis.getVoices();
-            
-            // 1. English (India) - Best for Hinglish
-            // 2. Hindi (India)
-            // 3. Any English
-            let targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
-                              voices.find(v => v.lang.includes('hi-IN')) || 
-                              voices.find(v => v.lang.includes('en'));
-
-            if (targetVoice) {
-                currentUtterance.voice = targetVoice;
-                currentUtterance.rate = 1.0; 
-                currentUtterance.pitch = 1.0;
-            }
-
-            // ✅ DEBUGGING: Print what it is trying to say
-            console.log("🗣️ Speaking:", text);
-
-            currentUtterance.onend = function() {
-                currentUtterance = null; // Clean up after finishing
-                callback();
-            };
-
-            currentUtterance.onerror = function(e) {
-                console.error("TTS Error:", e);
-                currentUtterance = null;
-                callback();
-            };
-
-            window.speechSynthesis.speak(currentUtterance);
+        function finishAlert(box) {
+            setTimeout(() => {
+                box.classList.remove('show');
+                setTimeout(() => { isPlaying = false; processQueue(); }, 1000);
+            }, 2000);
         }
     </script>
 </body>
 </html>
-
-
