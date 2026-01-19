@@ -3,128 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <title>Minimal Overlay</title>
-    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
-        body { margin: 0; padding: 0; overflow: hidden; background: transparent; height: 100vh; display: flex; align-items: flex-end; justify-content: flex-start; padding: 40px; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@500;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Hind:wght@500&display=swap');
+        
+        body { margin: 0; overflow: hidden; background: transparent; height: 100vh; display: flex; align-items: flex-end; justify-content: center; font-family: 'Roboto', 'Hind', sans-serif; padding-bottom: 50px; }
         
         #alert-box {
-            background: white; color: black; padding: 20px; border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             display: flex; align-items: center; gap: 20px;
-            opacity: 0; transform: translateY(20px);
-            transition: all 0.5s ease;
-            max-width: 500px;
+            opacity: 0; transform: translateY(50px); transition: all 0.5s ease-out;
+            background: rgba(255, 255, 255, 0.95); padding: 15px 30px; 
+            border-left: 10px solid #2ecc71; border-radius: 50px; box-shadow: 0 10px 20px rgba(0,0,0,0.3);
         }
         #alert-box.show { opacity: 1; transform: translateY(0); }
         
-        .alert-icon { font-size: 40px; }
-        .content { display: flex; flex-direction: column; }
-        .title { font-weight: 600; font-size: 18px; }
-        .highlight { color: #ff3b3b; }
-        .message { font-size: 14px; color: #555; margin-top: 2px; }
+        .alert-text { font-size: 28px; color: #222; margin: 0; font-weight: 900; }
+        .highlight { color: #2ecc71; } 
+        .amount { color: #27ae60; background: #eafff2; padding: 2px 10px; border-radius: 10px; }
+        .message { font-size: 20px; color: #555; margin: 0; font-weight: 500; border-left: 2px solid #ddd; padding-left: 15px; }
     </style>
 </head>
 <body>
     <div id="alert-box">
-        <div class="alert-icon">🎉</div>
-        <div class="content">
-            <div class="title"><span id="sender" class="highlight">Name</span> tipped <span id="amount">100</span>!</div>
-            <div class="message" id="message-text">Message...</div>
-        </div>
+        <h1 class="alert-text">
+            <span id="sender" class="highlight">USER</span> 
+            <span style="font-size: 20px; color:#888;">tipped</span> 
+            <span id="amount" class="amount">500</span>
+        </h1>
+        <p class="message" id="message-text">Message goes here...</p>
     </div>
-    
-    <script src="/socket.io/socket.io.js"></script>
+
     <script>
-        // ... (COPY THE EXACT SCRIPT LOGIC FROM ABOVE) ...
-        const socket = io();
-        const queue = [];
-        let isPlaying = false;
-        
-        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
-        const token = window.location.pathname.split('/').pop();
-        if(token) socket.emit('join-overlay', token);
+        var socket = io(); var queue = []; var isPlaying = false;
+        window.speechSynthesis.onvoiceschanged = function() { window.speechSynthesis.getVoices(); };
+
+        var pathParts = window.location.pathname.split('/');
+        var uuid = pathParts[pathParts.length - 1]; 
+        if (!uuid) uuid = pathParts[pathParts.length - 2];
+        if (uuid && uuid !== "overlay") { socket.emit('join-overlay', uuid); }
+
         socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
 
         function processQueue() {
             if (isPlaying || queue.length === 0) return;
             isPlaying = true;
-            const data = queue.shift();
+            var data = queue.shift();
             showAlert(data);
         }
-
         function showAlert(data) {
-            // ... visual update code ...
-
-            const box = document.getElementById('alert-box');
+            var senderName = data.tipper || "Anonymous";
+            document.getElementById('sender').innerText = senderName;
+            document.getElementById('amount').innerText = "₹" + data.amount;
+            document.getElementById('message-text').innerText = `"${data.message}"`;
+            
+            var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // ✅ COMBINE THEM CLEARLY
-            // We use a "comma" instead of a period for a more natural pause
-            const fullText = `${data.sender} sent ${data.amount} tokens, says: ${data.message}`;
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+                var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount}. ${data.message}`);
+                
+                var voices = window.speechSynthesis.getVoices();
+                var targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
+                                  voices.find(v => v.lang.includes('hi-IN')) || 
+                                  voices[0];
+                if(targetVoice) utter.voice = targetVoice;
+                utter.rate = 0.9;
 
-            speakText(fullText, () => {
-                setTimeout(() => {
-                    box.classList.remove('show'); 
-                    setTimeout(() => {
-                        isPlaying = false;
-                        processQueue(); 
-                    }, 1000); 
-                }, 2000); 
-            });
+                utter.onend = () => finishAlert(box);
+                utter.onerror = () => finishAlert(box);
+                window.speechSynthesis.speak(utter);
+            } else { setTimeout(() => finishAlert(box), 4000); }
         }
-
-        // --- GLOBAL VARIABLES (To prevent audio cutting off) ---
-        const socket = io(); 
-        const queue = [];    
-        let isPlaying = false;
-        let currentUtterance = null; // ✅ GLOBAL VARIABLE (Fixes the bug)
-
-        // ... (Keep your loadVoices and other logic same) ...
-
-        // --- UPDATED TTS FUNCTION ---
-        function speakText(text, callback) {
-            if (!window.speechSynthesis) {
-                console.error("No TTS Support");
-                return callback();
-            }
-
-            // Cancel old audio
-            window.speechSynthesis.cancel();
-
-            // ✅ ASSIGN TO GLOBAL VARIABLE
-            currentUtterance = new SpeechSynthesisUtterance(text);
-            
-            const voices = window.speechSynthesis.getVoices();
-            
-            // 1. English (India) - Best for Hinglish
-            // 2. Hindi (India)
-            // 3. Any English
-            let targetVoice = voices.find(v => v.lang.includes('en-IN')) || 
-                              voices.find(v => v.lang.includes('hi-IN')) || 
-                              voices.find(v => v.lang.includes('en'));
-
-            if (targetVoice) {
-                currentUtterance.voice = targetVoice;
-                currentUtterance.rate = 1.0; 
-                currentUtterance.pitch = 1.0;
-            }
-
-            // ✅ DEBUGGING: Print what it is trying to say
-            console.log("🗣️ Speaking:", text);
-
-            currentUtterance.onend = function() {
-                currentUtterance = null; // Clean up after finishing
-                callback();
-            };
-
-            currentUtterance.onerror = function(e) {
-                console.error("TTS Error:", e);
-                currentUtterance = null;
-                callback();
-            };
-
-            window.speechSynthesis.speak(currentUtterance);
+        function finishAlert(box) {
+            setTimeout(() => { box.classList.remove('show'); setTimeout(() => { isPlaying = false; processQueue(); }, 1000); }, 2000);
         }
     </script>
 </body>
