@@ -515,11 +515,34 @@ app.get('/stats-overlay/:token', async (req, res) => {
 // ==========================================
 
 // Middleware: Check if user is Admin
-const requireAdmin = (req, res, next) => {
-    if (req.user.role !== 'admin') {
-        return res.status(403).json({ error: "Access Denied: Admins Only" });
+// Middleware: Check if user is Admin (Database Verified)
+const requireAdmin = async (req, res, next) => {
+    try {
+        // 1. Fetch the user's LATEST role from the database
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', req.user.id)
+            .single();
+
+        // 2. Check if valid
+        if (error || !user) {
+            console.log("Admin Check Error:", error);
+            return res.status(403).json({ error: "User verify failed" });
+        }
+
+        // 3. Verify 'admin' status
+        if (user.role !== 'admin') {
+            console.log(`User ${req.user.id} tried to access admin but is role: ${user.role}`);
+            return res.status(403).json({ error: "Access Denied: Admins Only" });
+        }
+
+        next(); // Success! Let them pass.
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Server Error" });
     }
-    next();
 };
 
 // 1. Get All Withdrawals
@@ -574,6 +597,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
