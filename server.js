@@ -545,12 +545,13 @@ const requireAdmin = async (req, res, next) => {
     }
 };
 
-// 1. Get All Withdrawals
+/// 1. Get All Withdrawals
 app.get('/admin/withdrawals', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const { data: requests, error } = await supabase
             .from('withdrawals')
-            .select('t_id, amount, upi_id, status, created_at, users:user_id (username)')
+            // 👇 CHANGE THIS LINE to include 'id'
+            .select('id, t_id, amount, upi_id, status, created_at, users:user_id (username)')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -608,6 +609,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
