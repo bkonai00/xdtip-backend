@@ -510,6 +510,63 @@ app.get('/stats-overlay/:token', async (req, res) => {
     res.sendFile(path.join(__dirname, fileToSend));
 });
 
+// ==========================================
+// Z. ADMIN PANEL ROUTES
+// ==========================================
+
+// Middleware: Check if user is Admin
+const requireAdmin = (req, res, next) => {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: "Access Denied: Admins Only" });
+    }
+    next();
+};
+
+// 1. Get All Withdrawals
+app.get('/admin/withdrawals', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const { data: requests, error } = await supabase
+            .from('withdrawals')
+            .select('t_id, amount, upi_id, status, created_at, users:user_id (username)')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        res.json({ success: true, requests });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. Process Payout (Approve/Reject)
+app.post('/admin/payout', authenticateToken, requireAdmin, async (req, res) => {
+    const { withdrawal_id, status } = req.body; // status = 'paid' or 'rejected'
+
+    try {
+        // A. Update the withdrawal status
+        const { data: withdrawal, error } = await supabase
+            .from('withdrawals')
+            .update({ status: status })
+            .eq('t_id', withdrawal_id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // B. If Rejected, REFUND the money back to user's wallet
+        if (status === 'rejected') {
+            await supabase.rpc('increment_balance', { 
+                user_id: withdrawal.user_id, 
+                amount: withdrawal.amount 
+            });
+            console.log(`Refunded ${withdrawal.amount} to user ${withdrawal.user_id}`);
+        }
+
+        res.json({ success: true, message: `Request marked as ${status}` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ------------------------------------------
 // START SERVER
 // ------------------------------------------
@@ -517,5 +574,6 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
