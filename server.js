@@ -336,7 +336,7 @@ app.post('/withdraw', authenticateToken, async (req, res) => {
     const { amount, upiId } = req.body;
     const userId = req.user.id;
 
-    if (amount < 100) return res.status(400).json({ error: "Min withdrawal is 100" });
+    if (amount < 0) return res.status(400).json({ error: "THANK YOU FOR USING XDTIP" });
 
     try {
         const { data: user } = await supabase.from('users').select('balance').eq('id', userId).single();
@@ -517,4 +517,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
