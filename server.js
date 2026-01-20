@@ -562,20 +562,29 @@ app.get('/admin/withdrawals', authenticateToken, requireAdmin, async (req, res) 
 
 // 2. Process Payout (Approve/Reject)
 app.post('/admin/payout', authenticateToken, requireAdmin, async (req, res) => {
-    const { withdrawal_id, status } = req.body; // status = 'paid' or 'rejected'
+    // 👇 We receive 'manual_t_id' from the frontend now
+    const { withdrawal_id, status, manual_t_id } = req.body; 
 
     try {
-        // A. Update the withdrawal status
+        // Prepare the update data
+        let updateData = { status: status };
+        
+        // If the admin typed a Transaction ID, save it to 't_id'
+        if (manual_t_id) {
+            updateData.t_id = manual_t_id;
+        }
+
+        // A. Update the withdrawal in Database
         const { data: withdrawal, error } = await supabase
             .from('withdrawals')
-            .update({ status: status })
-            .eq('t_id', withdrawal_id)
+            .update(updateData)
+            .eq('id', withdrawal_id) // ⚠️ MATCH BY 'id' (Row ID), NOT 't_id'
             .select()
             .single();
 
         if (error) throw error;
 
-        // B. If Rejected, REFUND the money back to user's wallet
+        // B. If Rejected, REFUND the money
         if (status === 'rejected') {
             await supabase.rpc('increment_balance', { 
                 user_id: withdrawal.user_id, 
@@ -585,7 +594,9 @@ app.post('/admin/payout', authenticateToken, requireAdmin, async (req, res) => {
         }
 
         res.json({ success: true, message: `Request marked as ${status}` });
+
     } catch (err) {
+        console.error("Payout Error:", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -597,6 +608,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
