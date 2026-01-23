@@ -66,6 +66,10 @@
         var uuid = pathParts[pathParts.length - 1]; 
         if (uuid) { socket.emit('join-overlay', uuid); fetchStats(); }
         
+        // --- TTS CONFIGURATION ---
+        // Native browser TTS supports emojis automatically (e.g. ❤️ reads as "Red Heart")
+        const enableTTS = true; 
+        
         async function fetchStats() {
             try {
                 const res = await fetch(`/stats/${uuid}`);
@@ -80,6 +84,7 @@
                 updateLatestList(data.latest);
             } catch(e) {}
         }
+
         function showNextTipper() {
             if (topTippers.length === 0) return;
             var nameEl = document.getElementById('rotator-name');
@@ -95,13 +100,39 @@
                 currentIndex++; if (currentIndex >= topTippers.length) currentIndex = 0;
             }, 500);
         }
+
         function updateLatestList(d) {
             var l = document.getElementById('latest-list'); l.innerHTML = "";
             d.forEach(t => {
                 l.innerHTML += `<li class="latest-item"><span>${t.sender_name}</span><span class="latest-amt">₹${t.amount}</span></li>`;
             });
         }
-        socket.on('new-tip', () => fetchStats());
+
+        // --- TTS FUNCTION ---
+        function speakTip(data) {
+            if (!enableTTS || !window.speechSynthesis) return;
+            
+            // Construct text. Includes message so emojis are read out.
+            // Example: "John sent ₹500. Hello World <emoji>"
+            const name = data.sender_name || "Anonymous";
+            const amount = data.amount || 0;
+            const message = data.message || ""; 
+            
+            const textToSpeak = `${name} sent ${amount} rupees. ${message}`;
+            
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            utterance.rate = 1; // Speed
+            utterance.pitch = 1; // Pitch
+            utterance.lang = 'en-US'; // Or 'hi-IN' for Indian accent if preferred
+            
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Updated Socket Listener to accept data
+        socket.on('new-tip', (data) => { 
+            fetchStats(); 
+            if(data) speakTip(data); 
+        });
     </script>
 </body>
 </html>
