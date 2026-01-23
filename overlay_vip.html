@@ -82,9 +82,14 @@
 
             if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
-                var cleanMessage = data.message.replace(/[^a-zA-Z0-9 \u0900-\u097F]/g, ""); 
-                var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount} rupees. ${cleanMessage}`);
                 
+                // --- CHANGED HERE: Removed the regex that stripped special chars/emojis ---
+                // We now use the raw message so the browser reads emojis (e.g. "Red Heart")
+                var messageToSpeak = data.message; 
+                
+                var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount} rupees. ${messageToSpeak}`);
+                
+                // Detect Hindi characters to switch voice accent
                 var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
                 var targetVoice = null;
 
