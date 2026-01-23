@@ -320,7 +320,7 @@ app.post('/test-alert', authenticateToken, (req, res) => {
     const fakeTip = {
         tipper: "Test Bot",
         amount: 69,
-        message: "This is a test alert!, यह एक परीक्षण चेतावनी है!, Yah ek pareekshan chetawani hai!. 🔥"
+        message: "This is a test alert!, यह एक परीक्षण चेतावनी है!, 🤣😁😅🥲❤️‍🔥!. 🔥"
     };
 
     console.log(`🚀 Sending Test Alert to room: ${username}`);
@@ -601,17 +601,32 @@ app.post('/admin/payout', authenticateToken, requireAdmin, async (req, res) => {
     }
 });
 
-// 3. Get All Users (New Route for Admin)
-app.get('/admin/users', authenticateToken, requireAdmin, async (req, res) => {
+// 3. Get Specific User Details (Read-Only)
+app.get('/admin/user/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
-        // Fetch all users sorted by newest first
-        const { data: users, error } = await supabase
+        const { id } = req.params;
+
+        // Fetch User Profile
+        const { data: user, error } = await supabase
             .from('users')
-            .select('id, username, email, role, balance, created_at')
-            .order('created_at', { ascending: false });
+            .select('id, username, email, role, balance, created_at, overlay_theme')
+            .eq('id', id)
+            .single();
 
         if (error) throw error;
-        res.json({ success: true, users });
+
+        // Optional: Calculate Total Tips Received
+        const { count } = await supabase
+            .from('tips')
+            .select('*', { count: 'exact', head: true })
+            .eq('receiver_id', id);
+
+        // Send combined data
+        res.json({ 
+            success: true, 
+            user: { ...user, total_tips_received: count } 
+        });
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -624,6 +639,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
