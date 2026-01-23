@@ -2,148 +2,106 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alert Overlay</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800&display=swap" rel="stylesheet">
-    
+    <title>Minimal Stats</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background: transparent; font-family: 'Montserrat', sans-serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
         
-        #alert-box {
-            display: none; 
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            width: 600px;
-            z-index: 100;
+        body { margin: 0; padding: 20px; overflow: hidden; background: transparent; font-family: 'Inter', sans-serif; }
+
+        /* MINIMAL BOX */
+        #stats-container {
+            width: 280px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 20px; color: #333;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
         }
 
-        .alert-image {
-            width: 150px; height: 150px;
-            border-radius: 50%;
-            border: 5px solid #00ff88;
-            box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
-            object-fit: cover;
-            animation: bounceIn 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        .label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+
+        /* ROTATOR */
+        .rotator-box { display: flex; align-items: center; justify-content: space-between; height: 40px; }
+        
+        .tipper-name { 
+            font-size: 18px; font-weight: 800; color: #222; 
+            opacity: 0; transition: opacity 0.5s;
+        }
+        .tipper-amount { 
+            font-size: 16px; color: #2ecc71; font-weight: 700; background: #eafff2; padding: 2px 8px; border-radius: 6px;
+            opacity: 0; transition: opacity 0.5s;
+        }
+        .visible { opacity: 1 !important; }
+
+        .rank-badge { 
+            background: #222; color: #fff; width: 20px; height: 20px; display: inline-flex; 
+            align-items: center; justify-content: center; border-radius: 50%; font-size: 10px; margin-right: 8px;
         }
 
-        .alert-text {
-            margin-top: 20px;
-            text-shadow: 0 4px 10px rgba(0,0,0,0.8);
-            animation: slideUp 0.8s ease-out;
-        }
-
-        .highlighter { color: #00ff88; font-size: 42px; display: block; margin-bottom: 10px; }
-        .message { color: white; font-size: 24px; font-weight: 400; }
-        .amount-tag { background: #00ff88; color: black; padding: 5px 15px; border-radius: 20px; font-size: 18px; font-weight: bold; margin-top: 10px; display: inline-block; }
-
-        @keyframes bounceIn { 0% { transform: scale(0); } 80% { transform: scale(1.1); } 100% { transform: scale(1); } }
-        @keyframes slideUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
+        /* LATEST LIST */
+        .divider { height: 1px; background: #eee; margin: 15px 0; }
+        .latest-list { list-style: none; padding: 0; margin: 0; }
+        .latest-item { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: #555; }
+        .latest-amt { color: #2ecc71; font-weight: 600; }
     </style>
 </head>
 <body>
-
-    <div id="alert-box">
-        <img id="alert-img" class="alert-image" src="https://media.giphy.com/media/l41lFw057lAJcYFPO/giphy.gif">
-        
-        <div class="alert-text">
-            <span id="alert-name" class="highlighter">NEW TIP!</span>
-            <div id="alert-msg" class="message">User sent a tip!</div>
-            <div id="alert-amount" class="amount-tag">₹0</div>
+    <div id="stats-container">
+        <div class="label">Top Supporter</div>
+        <div class="rotator-box">
+            <div style="display:flex; align-items:center;">
+                <span id="rank" class="rank-badge">1</span>
+                <span id="rotator-name" class="tipper-name">Loading...</span>
+            </div>
+            <span id="rotator-amount" class="tipper-amount">0</span>
         </div>
+        <div class="divider"></div>
+        <div class="label">Recent Tips</div>
+        <ul id="latest-list" class="latest-list"></ul>
     </div>
 
-    <audio id="alert-sound" src="https://cdn.pixabay.com/download/audio/2021/08/04/audio_12b0c7443c.mp3?filename=success-1-6297.mp3"></audio>
-
     <script>
-        // ⚠️ PASTE YOUR KEYS HERE
-        const mySupabaseUrl = 'YOUR_SUPABASE_URL_HERE';
-        const mySupabaseKey = 'YOUR_SUPABASE_ANON_KEY_HERE';
+        var socket = io(); var topTippers = []; var currentIndex = 0;
+        var pathParts = window.location.pathname.split('/');
+        var uuid = pathParts[pathParts.length - 1]; 
+        if (uuid) { socket.emit('join-overlay', uuid); fetchStats(); }
         
-        const client = window.supabase.createClient(mySupabaseUrl, mySupabaseKey);
-
-        // 1. Get Token from URL (Render passes the token via URL, e.g. /overlay/TOKEN)
-        // If your Render route is /overlay/:token, we grab it from the path:
-        const pathSegments = window.location.pathname.split('/');
-        const token = pathSegments[pathSegments.length - 1]; // Grabs the last part of URL
-
-        if (!token || token === 'overlay') {
-             // Fallback: Check query params (?token=...) just in case
-             const params = new URLSearchParams(window.location.search);
-             if(params.get('token')) {
-                 initOverlay(params.get('token'));
-             } else {
-                 console.error("No Token Found");
-             }
-        } else {
-            initOverlay(token);
+        async function fetchStats() {
+            try {
+                const res = await fetch(`/stats/${uuid}`);
+                const data = await res.json();
+                topTippers = data.top; 
+                if (topTippers.length > 0) { showNextTipper(); setInterval(showNextTipper, 3000); }
+                else { 
+                     var n = document.getElementById('rotator-name');
+                     n.innerText = "No Data"; n.classList.add('visible');
+                     document.getElementById('rotator-amount').classList.add('visible');
+                }
+                updateLatestList(data.latest);
+            } catch(e) {}
         }
-
-        async function initOverlay(obsToken) {
-            console.log("Connecting with token:", obsToken);
-            
-            // 2. Identify the Streamer using the Token
-            const { data: user, error } = await client
-                .from('users')
-                .select('id, logo_url')
-                .eq('obs_token', obsToken)
-                .single();
-
-            if (error || !user) {
-                console.error("Invalid Streamer Token");
-                return;
-            }
-
-            console.log("Listening for tips to User ID:", user.id);
-
-            // 3. Subscribe to Realtime Events
-            client
-                .channel('public:tips')
-                .on('postgres_changes', { 
-                    event: 'INSERT', 
-                    schema: 'public', 
-                    table: 'tips', 
-                    filter: `receiver_id=eq.${user.id}` 
-                }, (payload) => {
-                    console.log("🔔 NEW ALERT!", payload.new);
-                    playAlert(payload.new, user.logo_url);
-                })
-                .subscribe();
-        }
-
-        // 4. Play the Animation
-        function playAlert(tip, userLogo) {
-            const box = document.getElementById('alert-box');
-            const audio = document.getElementById('alert-sound');
-            
-            // Update Text
-            document.getElementById('alert-name').innerText = tip.sender_name || "Anonymous";
-            document.getElementById('alert-msg').innerText = tip.message || "Sent a tip!";
-            document.getElementById('alert-amount').innerText = `₹${tip.amount}`;
-            
-            // Update Image (Use user logo if available, else keep default gif)
-            /* if(userLogo) {
-                document.getElementById('alert-img').src = userLogo;
-            }
-            */
-
-            // Play Sound
-            audio.currentTime = 0;
-            audio.play().catch(e => console.log("Autoplay blocked:", e));
-            
-            // Show & Confetti
-            box.style.display = 'block';
-            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-
-            // Hide after 5 seconds
+        function showNextTipper() {
+            if (topTippers.length === 0) return;
+            var nameEl = document.getElementById('rotator-name');
+            var amtEl = document.getElementById('rotator-amount');
+            var rankEl = document.getElementById('rank');
+            nameEl.classList.remove('visible'); amtEl.classList.remove('visible');
             setTimeout(() => {
-                box.style.display = 'none';
-            }, 5000);
+                var tipper = topTippers[currentIndex];
+                nameEl.innerText = tipper.sender_name || "Anon";
+                amtEl.innerText = "₹" + tipper.amount;
+                rankEl.innerText = (currentIndex + 1);
+                nameEl.classList.add('visible'); amtEl.classList.add('visible');
+                currentIndex++; if (currentIndex >= topTippers.length) currentIndex = 0;
+            }, 500);
         }
+        function updateLatestList(d) {
+            var l = document.getElementById('latest-list'); l.innerHTML = "";
+            d.forEach(t => {
+                l.innerHTML += `<li class="latest-item"><span>${t.sender_name}</span><span class="latest-amt">₹${t.amount}</span></li>`;
+            });
+        }
+        socket.on('new-tip', () => fetchStats());
     </script>
 </body>
 </html>
