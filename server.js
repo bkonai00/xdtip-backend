@@ -545,13 +545,13 @@ const requireAdmin = async (req, res, next) => {
     }
 };
 
-/// 1. Get All Withdrawals
+// 1. Get All Withdrawals (Updated to fetch Email & Balance)
 app.get('/admin/withdrawals', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const { data: requests, error } = await supabase
             .from('withdrawals')
-            // 👇 CHANGE THIS LINE to include 'id'
-            .select('id, t_id, amount, upi_id, status, created_at, users:user_id (username)')
+            // 👇 ADDED 'email, balance' inside the users(...) part
+            .select('id, t_id, amount, upi_id, status, created_at, users:user_id (username, email, balance)')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -560,7 +560,6 @@ app.get('/admin/withdrawals', authenticateToken, requireAdmin, async (req, res) 
         res.status(500).json({ error: err.message });
     }
 });
-
 // 2. Process Payout (Approve/Reject)
 app.post('/admin/payout', authenticateToken, requireAdmin, async (req, res) => {
     // 👇 We receive 'manual_t_id' from the frontend now
@@ -609,6 +608,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
