@@ -601,6 +601,22 @@ app.post('/admin/payout', authenticateToken, requireAdmin, async (req, res) => {
     }
 });
 
+// 3. Get All Users (New Route for Admin)
+app.get('/admin/users', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        // Fetch all users sorted by newest first
+        const { data: users, error } = await supabase
+            .from('users')
+            .select('id, username, email, role, balance, created_at')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        res.json({ success: true, users });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ------------------------------------------
 // START SERVER
 // ------------------------------------------
@@ -608,6 +624,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
