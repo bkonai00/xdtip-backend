@@ -545,12 +545,12 @@ const requireAdmin = async (req, res, next) => {
     }
 };
 
-// 1. Get All Withdrawals (Updated to fetch Email & Balance)
+// 1. Get All Withdrawals (Updated for User Details)
 app.get('/admin/withdrawals', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const { data: requests, error } = await supabase
             .from('withdrawals')
-            // 👇 ADDED 'email, balance' inside the users(...) part
+            // 👇 KEY CHANGE: Added 'email' and 'balance' here!
             .select('id, t_id, amount, upi_id, status, created_at, users:user_id (username, email, balance)')
             .order('created_at', { ascending: false });
 
@@ -608,6 +608,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
