@@ -645,13 +645,16 @@ app.get('/admin/users', authenticateToken, requireAdmin, async (req, res) => {
 }); 
 // 👆 MAKE SURE THIS }); IS HERE!
 
-// ----------------------------------------------------
-// START THE SERVER (Do not delete this!)
-// ----------------------------------------------------
+// --- PASTE THIS AT THE VERY BOTTOM OF SERVER.JS ---
+
+}); // Closes any accidentally open function
+// If the line above causes a "Unexpected token" error, delete it.
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
