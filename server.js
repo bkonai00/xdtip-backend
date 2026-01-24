@@ -31,7 +31,7 @@ app.use(cors());
 app.use(express.json());
 
 // ------------------------------------------
-// AUTHENTICATION CHECKER
+// AUTHENTICATION CHECKER (Middleware)
 // ------------------------------------------
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -47,12 +47,35 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ------------------------------------------
+// ADMIN CHECKER (Middleware)
+// ------------------------------------------
+const requireAdmin = async (req, res, next) => {
+    try {
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', req.user.id)
+            .single();
+
+        if (error || !user) return res.status(403).json({ error: "User verify failed" });
+
+        if (user.role !== 'admin') {
+            return res.status(403).json({ error: "Access Denied: Admins Only" });
+        }
+
+        next();
+    } catch (err) {
+        return res.status(500).json({ error: "Server Error" });
+    }
+};
+
+// ------------------------------------------
 // SOCKET CONNECTION (The Bridge)
 // ------------------------------------------
 io.on('connection', (socket) => {
     console.log('Socket connected:', socket.id);
 
-    // 1. Dashboard/Frontend Join (Standard)
+    // 1. Dashboard/Frontend Join
     socket.on('join', (room) => {
         if (room) {
             socket.join(room.toLowerCase());
@@ -60,12 +83,10 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 2. Overlay Join (The Fix)
+    // 2. Overlay Join
     socket.on('join-overlay', async (token) => {
         if (!token) return;
-
         try {
-            // Ask Database: "Who owns this token?"
             const { data: user } = await supabase
                 .from('users')
                 .select('username') 
@@ -74,10 +95,8 @@ io.on('connection', (socket) => {
 
             if (user && user.username) {
                 const roomName = user.username.toLowerCase();
-                socket.join(roomName); // ✅ Join the USERNAME room
-                console.log(`✅ Overlay (Token: ${token.slice(0,5)}...) bridged to Room: ${roomName}`);
-            } else {
-                console.log(`❌ Invalid Overlay Token: ${token}`);
+                socket.join(roomName); 
+                console.log(`✅ Overlay bridged to Room: ${roomName}`);
             }
         } catch (err) {
             console.error("Overlay Join Error:", err.message);
@@ -89,7 +108,6 @@ io.on('connection', (socket) => {
 // API ROUTES
 // ------------------------------------------
 
-// A. Home Check
 app.get('/', (req, res) => {
     res.send('xdtip Backend is Running! 🚀');
 });
@@ -172,7 +190,7 @@ app.get('/profile/:username', async (req, res) => {
     else res.json({ success: false });
 });
 
-// F. Send Tip (FIXED: Sends to BOTH Username and UUID)
+// F. Send Tip
 app.post('/tip', authenticateToken, async (req, res) => {
     const { receiverUsername, amount, message } = req.body;
     const senderId = req.user.id;
@@ -180,7 +198,6 @@ app.post('/tip', authenticateToken, async (req, res) => {
     if (amount < 10) return res.status(400).json({ error: "Min tip is 10" });
 
     try {
-        // Fetch Receiver with ID (so we can alert their UUID room)
         const { data: receiver } = await supabase.from('users').select('id, balance').eq('username', receiverUsername).single();
         if (!receiver) return res.status(404).json({ error: "Creator not found" });
 
@@ -193,38 +210,25 @@ app.post('/tip', authenticateToken, async (req, res) => {
         await supabase.rpc('decrement_balance', { user_id: senderId, amount: amount });
         await supabase.rpc('increment_balance', { user_id: receiver.id, amount: creatorShare });
         
-        // Save Tip (Make sure your 'tips' table has a 'sender_name' column if you want stats to work perfectly!)
         await supabase.from('tips').insert([{ 
             sender_id: senderId, 
             receiver_id: receiver.id, 
             amount, 
             message,
-            sender_name: req.user.username // Optional: if you added this column
+            sender_name: req.user.username 
         }]);
 
-        // -----------------------------------------------------
-        // ⚠️ FIXED ALERT LOGIC
-        // -----------------------------------------------------
         const alertData = {
-            tipper: req.user.username, // Real Sender Name
+            tipper: req.user.username,
             amount: amount,
             message: message
         };
 
-        // 1. Send to Username Room (For Dashboard)
-        if (receiverUsername) {
-            io.to(receiverUsername.toLowerCase()).emit('new-tip', alertData);
-        }
-
-        // 2. Send to User ID Room (For Overlay Link)
-        if (receiver && receiver.id) {
-            console.log(`Sending alert to UUID room: ${receiver.id}`);
-            io.to(receiver.id).emit('new-tip', alertData);
-        }
+        if (receiverUsername) io.to(receiverUsername.toLowerCase()).emit('new-tip', alertData);
+        if (receiver && receiver.id) io.to(receiver.id).emit('new-tip', alertData);
 
         res.json({ success: true, message: `Sent ${amount} tokens!` });
     } catch (err) {
-        console.error("Tip Error:", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -251,7 +255,7 @@ app.get('/history', authenticateToken, async (req, res) => {
     }
 });
 
-// H. Upload Logo (Supabase Storage)
+// H. Upload Logo
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -271,10 +275,7 @@ app.post('/upload-logo', authenticateToken, upload.single('logo'), async (req, r
 
         if (error) throw error;
 
-        const { data: publicData } = supabase.storage
-            .from('logos')
-            .getPublicUrl(filename);
-
+        const { data: publicData } = supabase.storage.from('logos').getPublicUrl(filename);
         const fullUrl = publicData.publicUrl;
         await supabase.from('users').update({ logo_url: fullUrl }).eq('id', req.user.id);
 
@@ -284,50 +285,29 @@ app.post('/upload-logo', authenticateToken, upload.single('logo'), async (req, r
     }
 });
 
-// ==========================================
-// I. SERVE OVERLAY (Dynamic Theme Selector)
-// ==========================================
+// I. SERVE OVERLAY
 app.get('/overlay/:token', async (req, res) => {
     const { token } = req.params;
-    
-    // 1. Check which theme the user selected in DB
-    const { data: user } = await supabase
-        .from('users')
-        .select('overlay_theme')
-        .eq('obs_token', token)
-        .single();
+    const { data: user } = await supabase.from('users').select('overlay_theme').eq('obs_token', token).single();
 
-    // Default to 'overlay.html' (Classic)
     let fileToSend = 'overlay.html'; 
-
     if (user) {
         if (user.overlay_theme === 'neon') fileToSend = 'overlay_neon.html';
         if (user.overlay_theme === 'minimal') fileToSend = 'overlay_minimal.html';
         if (user.overlay_theme === 'vip') fileToSend = 'overlay_vip.html';
     }
-
-    // 2. Serve the correct file
     res.sendFile(path.join(__dirname, fileToSend));
 });
 
-// ==========================================
-// M. TEST ALERT (New Feature)
-// ==========================================
+// M. TEST ALERT
 app.post('/test-alert', authenticateToken, (req, res) => {
     const username = req.user.username;
-
-    // Create a Fake Tip Object
     const fakeTip = {
         tipper: "Test Bot",
         amount: 69,
-        message: "This is a test alert!, यह एक परीक्षण चेतावनी है!, 🤣😁😅🥲❤️‍🔥!. 🔥"
+        message: "This is a test alert! 🔥"
     };
-
-    console.log(`🚀 Sending Test Alert to room: ${username}`);
-    
-    // Send to the User's Room (The Overlay listens to this)
     io.to(username.toLowerCase()).emit('new-tip', fakeTip);
-
     res.json({ success: true, message: "Test Alert Sent!" });
 });
 
@@ -336,25 +316,22 @@ app.post('/withdraw', authenticateToken, async (req, res) => {
     const { amount, upiId } = req.body;
     const userId = req.user.id;
 
-    if (amount < 0) return res.status(400).json({ error: "THANK YOU FOR USING XDTIP" });
+    if (amount < 0) return res.status(400).json({ error: "Invalid amount" });
 
     try {
         const { data: user } = await supabase.from('users').select('balance').eq('id', userId).single();
-        
         if (user.balance < amount) return res.status(400).json({ error: "Insufficient balance" });
 
-        // Deduct Balance
         const { error: balError } = await supabase.rpc('decrement_balance', { user_id: userId, amount: amount });
         if (balError) throw balError;
 
-        // Create Request (Linked to public.users)
         const { error: reqError } = await supabase
             .from('withdrawals')
             .insert([{ user_id: userId, amount, upi_id: upiId }]);
 
         if (reqError) throw reqError;
 
-        res.json({ success: true, message: "Withdrawal Requested! Admin will process it." });
+        res.json({ success: true, message: "Withdrawal Requested!" });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -370,69 +347,48 @@ app.get('/withdrawals', authenticateToken, async (req, res) => {
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-
         const history = withdrawals.map(w => ({
             t_id: w.t_id,
             amount: w.amount,
             status: w.status,
             date: new Date(w.created_at).toLocaleDateString()
         }));
-
         res.json({ success: true, history });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// L. WEBHOOK PAYMENT (Razorpay)
+// L. WEBHOOK PAYMENT
 app.post('/webhook', async (req, res) => {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
-    // 1. Validate Signature
     const shasum = crypto.createHmac('sha256', secret);
     shasum.update(JSON.stringify(req.body));
     const digest = shasum.digest('hex');
 
     if (digest === req.headers['x-razorpay-signature']) {
-        console.log("✅ Valid Webhook received");
         const event = req.body.event;
-
         if (event === 'payment.captured') {
             const payment = req.body.payload.payment.entity;
             const amount = payment.amount / 100;
             const paymentId = payment.id;
-            
-            // LOOK FOR USERNAME IN NOTES
             let targetUser = payment.notes.username || payment.notes.Username;
 
-            if (!targetUser) {
-                console.log("❌ No username found in notes!");
-                return res.json({ status: 'ignored' });
-            }
-
-            try {
-                const { data: user } = await supabase
-                    .from('users').select('id').eq('username', targetUser).single();
-
-                if (user) {
-                    // A. Add Balance
-                    const { error: rpcError } = await supabase.rpc('increment_balance', { user_id: user.id, amount: amount });
-                    if (rpcError) {
-                        console.error("❌ Balance Update Failed:", rpcError.message);
-                    } else {
-                        console.log(`✅ Balance updated for ${targetUser}`);
+            if (targetUser) {
+                try {
+                    const { data: user } = await supabase.from('users').select('id').eq('username', targetUser).single();
+                    if (user) {
+                        await supabase.rpc('increment_balance', { user_id: user.id, amount: amount });
+                        await supabase.from('transactions').insert([{
+                            user_id: user.id,
+                            amount: amount,
+                            razorpay_payment_id: paymentId,
+                            type: 'deposit',
+                            status: 'success'
+                        }]);
                     }
-                    
-                    // B. Save Transaction
-                    await supabase.from('transactions').insert([{
-                        user_id: user.id,
-                        amount: amount,
-                        razorpay_payment_id: paymentId,
-                        type: 'deposit',
-                        status: 'success'
-                    }]);
-                }
-            } catch (err) { console.error("Database Error:", err); }
+                } catch (err) { console.error("Database Error:", err); }
+            }
         }
         res.json({ status: 'ok' });
     } else {
@@ -440,73 +396,38 @@ app.post('/webhook', async (req, res) => {
     }
 });
 
-// ==========================================
-// H. STATS API (Calculates Top 3 & Latest)
-// ==========================================
+// H. STATS API
 app.get('/stats/:token', async (req, res) => {
     const { token } = req.params;
-
     try {
-        // 1. Get User ID from Token
-        const { data: user } = await supabase
-            .from('users')
-            .select('id')
-            .eq('obs_token', token)
-            .single();
-
+        const { data: user } = await supabase.from('users').select('id').eq('obs_token', token).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        // 2. Get Latest 3 Tips (For the list)
         const { data: latest } = await supabase
-            .from('tips')
-            .select('sender_name, amount') // Ensure your column is named 'sender_name'
-            .eq('receiver_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(3);
+            .from('tips').select('sender_name, amount')
+            .eq('receiver_id', user.id).order('created_at', { ascending: false }).limit(3);
 
-        // 3. Get Top 3 Tippers (For the Rotator)
         const { data: top } = await supabase
-            .from('tips')
-            .select('sender_name, amount')
-            .eq('receiver_id', user.id)
-            .order('amount', { ascending: false })
-            .limit(3);
+            .from('tips').select('sender_name, amount')
+            .eq('receiver_id', user.id).order('amount', { ascending: false }).limit(3);
 
-        res.json({
-            top: top || [], 
-            latest: latest || []
-        });
-
+        res.json({ top: top || [], latest: latest || [] });
     } catch (err) {
-        console.error("Stats Error:", err);
         res.status(500).json({ error: "Stats failed" });
     }
 });
 
-// ==========================================
-// S. SERVE STATS OVERLAY (Dynamic Theme)
-// ==========================================
+// S. SERVE STATS OVERLAY
 app.get('/stats-overlay/:token', async (req, res) => {
     const { token } = req.params;
+    const { data: user } = await supabase.from('users').select('overlay_theme').eq('obs_token', token).single();
 
-    // 1. Check which theme the user selected in DB
-    const { data: user } = await supabase
-        .from('users')
-        .select('overlay_theme')
-        .eq('obs_token', token)
-        .single();
-
-    // Default to 'overlay_stats.html' (Classic/Gold)
     let fileToSend = 'overlay_stats.html'; 
-
     if (user) {
         if (user.overlay_theme === 'neon') fileToSend = 'overlay_stats_neon.html';
         if (user.overlay_theme === 'minimal') fileToSend = 'overlay_stats_minimal.html';
-        // VIP Theme uses the Gold/Classic stats because it matches perfectly
         if (user.overlay_theme === 'vip') fileToSend = 'overlay_stats_vip.html';
     }
-
-    // 2. Serve the correct file
     res.sendFile(path.join(__dirname, fileToSend));
 });
 
@@ -514,43 +435,11 @@ app.get('/stats-overlay/:token', async (req, res) => {
 // Z. ADMIN PANEL ROUTES
 // ==========================================
 
-// Middleware: Check if user is Admin
-// Middleware: Check if user is Admin (Database Verified)
-const requireAdmin = async (req, res, next) => {
-    try {
-        // 1. Fetch the user's LATEST role from the database
-        const { data: user, error } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', req.user.id)
-            .single();
-
-        // 2. Check if valid
-        if (error || !user) {
-            console.log("Admin Check Error:", error);
-            return res.status(403).json({ error: "User verify failed" });
-        }
-
-        // 3. Verify 'admin' status
-        if (user.role !== 'admin') {
-            console.log(`User ${req.user.id} tried to access admin but is role: ${user.role}`);
-            return res.status(403).json({ error: "Access Denied: Admins Only" });
-        }
-
-        next(); // Success! Let them pass.
-
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ error: "Server Error" });
-    }
-};
-
-// 1. Get All Withdrawals (Updated for User Details)
+// 1. Get All Withdrawals
 app.get('/admin/withdrawals', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const { data: requests, error } = await supabase
             .from('withdrawals')
-            // 👇 KEY CHANGE: Added 'email' and 'balance' here!
             .select('id, t_id, amount, upi_id, status, created_at, users:user_id (username, email, balance)')
             .order('created_at', { ascending: false });
 
@@ -560,53 +449,38 @@ app.get('/admin/withdrawals', authenticateToken, requireAdmin, async (req, res) 
         res.status(500).json({ error: err.message });
     }
 });
-// 2. Process Payout (Approve/Reject)
+
+// 2. Process Payout
 app.post('/admin/payout', authenticateToken, requireAdmin, async (req, res) => {
-    // 👇 We receive 'manual_t_id' from the frontend now
     const { withdrawal_id, status, manual_t_id } = req.body; 
-
     try {
-        // Prepare the update data
         let updateData = { status: status };
-        
-        // If the admin typed a Transaction ID, save it to 't_id'
-        if (manual_t_id) {
-            updateData.t_id = manual_t_id;
-        }
+        if (manual_t_id) updateData.t_id = manual_t_id;
 
-        // A. Update the withdrawal in Database
         const { data: withdrawal, error } = await supabase
             .from('withdrawals')
             .update(updateData)
-            .eq('id', withdrawal_id) // ⚠️ MATCH BY 'id' (Row ID), NOT 't_id'
-            .select()
-            .single();
+            .eq('id', withdrawal_id)
+            .select().single();
 
         if (error) throw error;
 
-        // B. If Rejected, REFUND the money
         if (status === 'rejected') {
             await supabase.rpc('increment_balance', { 
                 user_id: withdrawal.user_id, 
                 amount: withdrawal.amount 
             });
-            console.log(`Refunded ${withdrawal.amount} to user ${withdrawal.user_id}`);
         }
-
         res.json({ success: true, message: `Request marked as ${status}` });
-
     } catch (err) {
-        console.error("Payout Error:", err);
         res.status(500).json({ error: err.message });
     }
 });
 
-// 3. Get Specific User Details (Read-Only)
+// 3. Get Specific User Details
 app.get('/admin/user/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-
-        // Fetch User Profile
         const { data: user, error } = await supabase
             .from('users')
             .select('id, username, email, role, balance, created_at, overlay_theme')
@@ -615,19 +489,16 @@ app.get('/admin/user/:id', authenticateToken, requireAdmin, async (req, res) => 
 
         if (error) throw error;
 
-        // Optional: Calculate Total Tips Received
         const { count } = await supabase
             .from('tips')
             .select('*', { count: 'exact', head: true })
             .eq('receiver_id', id);
 
-        // Send combined data
-        res.json({ 
-            success: true, 
-            user: { ...user, total_tips_received: count } 
-        });
-        // ---------------------------------------------------------
-// ... (your existing code is above this) ...
+        res.json({ success: true, user: { ...user, total_tips_received: count } });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // 4. Get ALL Users (For Admin Panel)
 app.get('/admin/users', authenticateToken, requireAdmin, async (req, res) => {
@@ -639,30 +510,15 @@ app.get('/admin/users', authenticateToken, requireAdmin, async (req, res) => {
 
         if (error) throw error;
         res.json({ success: true, users });
-
-    } catch (err) {  // <--- THIS LINE WAS LIKELY MISSING
-        console.error("Error fetching users:", err);
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
+// ==========================================
+// START SERVER
+// ==========================================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
