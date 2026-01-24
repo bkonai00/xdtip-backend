@@ -627,6 +627,8 @@ app.get('/admin/user/:id', authenticateToken, requireAdmin, async (req, res) => 
             user: { ...user, total_tips_received: count } 
         });
         // ---------------------------------------------------------
+// ... (your existing code is above this) ...
+
 // 4. Get ALL Users (For Admin Panel)
 app.get('/admin/users', authenticateToken, requireAdmin, async (req, res) => {
     try {
@@ -640,15 +642,17 @@ app.get('/admin/users', authenticateToken, requireAdmin, async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
-});
+}); 
+// 👆 MAKE SURE THIS }); IS HERE!
 
-// ------------------------------------------
-// START SERVER
-// ------------------------------------------
+// ----------------------------------------------------
+// START THE SERVER (Do not delete this!)
+// ----------------------------------------------------
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
