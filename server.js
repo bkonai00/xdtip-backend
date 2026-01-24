@@ -626,6 +626,27 @@ app.get('/admin/user/:id', authenticateToken, requireAdmin, async (req, res) => 
             success: true, 
             user: { ...user, total_tips_received: count } 
         });
+        // ---------------------------------------------------------
+// 4. Get ALL Users List (For Admin Panel Table)
+// ---------------------------------------------------------
+app.get('/admin/users', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        // Fetch specific fields for all users
+        const { data: users, error } = await supabase
+            .from('users')
+            .select('id, username, email, balance, role, created_at')
+            .order('created_at', { ascending: false }); // Show newest users first
+
+        if (error) throw error;
+
+        // Send the list to the frontend
+        res.json({ success: true, users });
+        
+    } catch (err) {
+        console.error("Error fetching users:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
 
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -639,6 +660,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
