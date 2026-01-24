@@ -639,21 +639,18 @@ app.get('/admin/users', authenticateToken, requireAdmin, async (req, res) => {
 
         if (error) throw error;
         res.json({ success: true, users });
-    } catch (err) {
+
+    } catch (err) {  // <--- THIS LINE WAS LIKELY MISSING
+        console.error("Error fetching users:", err);
         res.status(500).json({ error: err.message });
     }
-}); 
-// 👆 MAKE SURE THIS }); IS HERE!
-
-// --- PASTE THIS AT THE VERY BOTTOM OF SERVER.JS ---
-
-}); // Closes any accidentally open function
-// If the line above causes a "Unexpected token" error, delete it.
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
