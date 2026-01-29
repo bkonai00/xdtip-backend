@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Neon Staggered Overlay</title>
+    <title>basicgamerz Overlay</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         /* --- FONT SETUP --- */
@@ -28,28 +28,27 @@
         #alert-box {
             text-align: center; 
             opacity: 0; 
-            transform: skewX(-10deg) scale(0.8); 
+            transform: scale(0.8); /* Removed skew for a cleaner look without the box */
             transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
-            background: rgba(0, 0, 0, 0.95); 
-            padding: 40px; 
-            border: 4px solid #FF0039; /* Red Border */
-            box-shadow: 0 0 30px rgba(255, 0, 57, 0.5), inset 0 0 20px rgba(255, 0, 57, 0.2); 
+            
+            /* --- REMOVED BACKGROUND AND BORDER --- */
+            background: transparent; 
+            border: none;
+            box-shadow: none; 
+            
             min-width: 500px;
         }
         
         /* Box Animation State */
-        #alert-box.show { opacity: 1; transform: skewX(-10deg) scale(1); }
+        #alert-box.show { opacity: 1; transform: scale(1); }
         
         /* --- ELEMENT ANIMATIONS --- */
-        /* Initially hidden */
         .reveal-element {
             opacity: 0;
             transform: translateY(20px);
             transition: all 0.5s ease;
         }
 
-        /* State when box is shown (Cascade delays) */
-        
         /* 1. Name appears first (0.4s delay) */
         #alert-box.show #sender-container { opacity: 1; transform: translateY(0); transition-delay: 0.4s; }
         
@@ -66,7 +65,8 @@
             color: #fff; 
             margin: 0; 
             text-transform: uppercase; 
-            text-shadow: 0 0 10px #fff; 
+            /* Enhanced text shadow since there is no background */
+            text-shadow: 0 0 5px #000, 0 0 10px #000; 
             letter-spacing: 1px;
             line-height: 1.4;
         }
@@ -74,7 +74,7 @@
         /* Neon Red User */
         .highlight { 
             color: #FF0039; 
-            text-shadow: 0 0 20px #FF0039, 0 0 10px #FF0039; 
+            text-shadow: 0 0 20px #FF0039, 0 0 10px #FF0039, 2px 2px 0 #000; 
             font-size: 42px;
         } 
         
@@ -82,11 +82,16 @@
         .amount { 
             color: #39FF14; 
             font-size: 55px; 
-            text-shadow: 0 0 20px #39FF14, 0 0 10px #39FF14; 
+            text-shadow: 0 0 20px #39FF14, 0 0 10px #39FF14, 2px 2px 0 #000; 
         }
 
         /* "Just Dropped" text style */
-        .mid-text { font-size: 20px; color: #ccc; vertical-align: middle; }
+        .mid-text { 
+            font-size: 20px; 
+            color: #ccc; 
+            vertical-align: middle; 
+            text-shadow: 1px 1px 2px #000;
+        }
         
         /* White Message */
         .message { 
@@ -94,16 +99,17 @@
             color: #FFFFFF; 
             margin-top: 20px; 
             font-weight: normal; 
-            text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+            text-shadow: 0 0 5px rgba(0,0,0,0.8), 0 0 10px rgba(0,0,0,0.5);
         }
         
         .alert-image { 
-            width: 100px; 
-            height: 100px; 
+            width: 120px; /* Slightly larger since no box constraints */
+            height: 120px; 
+            /* Removed the red border from the image too, or keep it if you like the circle */
             border: 3px solid #FF0039; 
             border-radius: 50%; 
             object-fit: cover; 
-            box-shadow: 0 0 15px #FF0039; 
+            box-shadow: 0 0 20px rgba(255, 0, 57, 0.6); 
             margin-bottom: 15px;
         }
     </style>
@@ -189,10 +195,10 @@
         }
 
         function showPopupAndAnimate(data, box) {
-            // 3. Show Box (Triggers CSS Animations for text)
+            // 3. Show Box (Triggers CSS Animations)
             box.classList.add('show');
 
-            // 4. Wait for Animations to finish (1.5s total) before Speaking
+            // 4. Wait for Animations (1.6s) then Speak
             setTimeout(() => {
                 speakTTS(data, box);
             }, 1600); 
