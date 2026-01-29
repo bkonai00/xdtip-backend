@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Basic Gold Stats</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        /* --- FONT SETUP (Basic) --- */
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
+        
+        body { 
+            margin: 0; padding: 20px; 
+            overflow: hidden; 
+            background: transparent; 
+            font-family: 'Montserrat', sans-serif; 
+        }
+
+        #container {
+            width: 600px; 
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* --- THE BAR DESIGN --- */
+        .stat-bar {
+            background: #000; 
+            border: 2px solid #FFD700; /* Reverted to Gold */
+            border-radius: 8px; 
+            padding: 5px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.2); /* Gold Glow */
+            height: 50px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Glossy Shine Effect */
+        .stat-bar::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 50%;
+            background: linear-gradient(to bottom, rgba(255,255,255,0.1), transparent);
+            pointer-events: none;
+        }
+
+        /* --- LEFT TEXT (Labels) --- */
+        .label-text {
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+            text-transform: uppercase;
+        }
+
+        /* --- RIGHT TEXT (Values) --- */
+        .value-text {
+            font-size: 24px;
+            font-weight: 900;
+            color: #FFD700; /* Reverted to Gold */
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5); /* Basic shadow */
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Crown for Top Tipper */
+        .crown { font-size: 24px; margin-left: 10px; vertical-align: middle; }
+
+        /* Animation Classes */
+        .fade-in { animation: fadeIn 0.5s forwards; }
+        .fade-out { animation: fadeOut 0.5s forwards; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-10px); } }
+
+    </style>
+</head>
+<body>
+
+    <div id="container">
+        
+        <div class="stat-bar">
+            <span class="label-text">#1 XDTIPPER</span>
+            <div>
+                <span id="top-one-name" class="value-text">LOADING...</span>
+                <span class="crown">👑</span>
+            </div>
+        </div>
+
+        <div class="stat-bar">
+            <span class="label-text">!XDTIP</span>
+            <span id="rotating-text" class="value-text">WAITING...</span>
+        </div>
+
+    </div>
+
+    <script>
+        var socket = io(); 
+        var topTippers = [];
+        var currentIndex = 0;
+        
+        // 1. Get Token from URL
+        var pathParts = window.location.pathname.split('/');
+        var uuid = pathParts[pathParts.length - 1]; 
+
+        // 2. Connect
+        if (uuid) {
+            socket.emit('join-overlay', uuid);
+            fetchStats();
+        }
+
+        // 3. Fetch Data from Server
+        async function fetchStats() {
+            try {
+                const res = await fetch(`/stats/${uuid}`);
+                const data = await res.json();
+                topTippers = data.top; 
+                updateDisplay();
+            } catch(e) { console.error("Stats Error:", e); }
+        }
+
+        // 4. Update the UI
+        function updateDisplay() {
+            // Safety Check: If no data
+            if (!topTippers || topTippers.length === 0) {
+                document.getElementById('top-one-name').innerText = "NO ONE YET";
+                document.getElementById('rotating-text').innerText = "BE THE FIRST!";
+                return;
+            }
+
+            // A. SET TOP BAR (Fixed #1)
+            // Shows: "NAME - ₹AMOUNT"
+            var numberOne = topTippers[0];
+            var topText = `${numberOne.sender_name} - ₹${numberOne.amount}`;
+            document.getElementById('top-one-name').innerText = topText;
+
+            // B. START BOTTOM BAR ROTATION
+            if (window.rotatorInterval) clearInterval(window.rotatorInterval);
+            
+            rotateBottomBar(); // Run once immediately
+            window.rotatorInterval = setInterval(rotateBottomBar, 3000); // Rotate every 3s
+        }
+
+        // 5. Rotation Logic
+        function rotateBottomBar() {
+            if (topTippers.length === 0) return;
+
+            var el = document.getElementById('rotating-text');
+            
+            // Fade Out
+            el.classList.remove('fade-in');
+            el.classList.add('fade-out');
+
+            setTimeout(() => {
+                // Change Text
+                var tipper = topTippers[currentIndex];
+                el.innerText = `${tipper.sender_name} - ₹${tipper.amount}`;
+                
+                // Fade In
+                el.classList.remove('fade-out');
+                el.classList.add('fade-in');
+
+                // Move to next person
+                currentIndex++;
+                if (currentIndex >= topTippers.length) currentIndex = 0;
+
+            }, 500); // 0.5s wait for fade out
+        }
+
+        // 6. Listen for New Tips
+        socket.on('new-tip', () => {
+            fetchStats(); // Refresh data instantly
+        });
+
+    </script>
+</body>
+</html>
