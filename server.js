@@ -427,6 +427,7 @@ app.get('/stats-overlay/:token', async (req, res) => {
     if (user) {
         if (user.overlay_theme === 'neon') fileToSend = 'overlay_stats_neon.html';
         if (user.overlay_theme === 'minimal') fileToSend = 'overlay_stats_minimal.html';
+        if (user.overlay_theme === 'vip') fileToSend = 'overlay_stats_vip.html';
         if (user.overlay_theme === 'basic') fileToSend = 'overlay_stats_basic.html';
     }
     res.sendFile(path.join(__dirname, fileToSend));
@@ -523,5 +524,6 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
