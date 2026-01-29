@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Basic Overlay</title>
+    <title>Neon Staggered Overlay</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         /* --- FONT SETUP --- */
@@ -32,15 +32,35 @@
             transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
             background: rgba(0, 0, 0, 0.95); 
             padding: 40px; 
-            /* Border matches the primary Red theme */
-            border: 4px solid #FF0039;
+            border: 4px solid #FF0039; /* Red Border */
             box-shadow: 0 0 30px rgba(255, 0, 57, 0.5), inset 0 0 20px rgba(255, 0, 57, 0.2); 
-            border-radius: 0px; 
             min-width: 500px;
         }
         
+        /* Box Animation State */
         #alert-box.show { opacity: 1; transform: skewX(-10deg) scale(1); }
         
+        /* --- ELEMENT ANIMATIONS --- */
+        /* Initially hidden */
+        .reveal-element {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.5s ease;
+        }
+
+        /* State when box is shown (Cascade delays) */
+        
+        /* 1. Name appears first (0.4s delay) */
+        #alert-box.show #sender-container { opacity: 1; transform: translateY(0); transition-delay: 0.4s; }
+        
+        /* 2. Amount appears second (0.9s delay) */
+        #alert-box.show #amount-container { opacity: 1; transform: translateY(0); transition-delay: 0.9s; }
+        
+        /* 3. Message appears last (1.4s delay) */
+        #alert-box.show #message-container { opacity: 1; transform: translateY(0); transition-delay: 1.4s; }
+
+
+        /* --- TEXT STYLING --- */
         .alert-text { 
             font-size: 36px; 
             color: #fff; 
@@ -48,42 +68,43 @@
             text-transform: uppercase; 
             text-shadow: 0 0 10px #fff; 
             letter-spacing: 1px;
+            line-height: 1.4;
         }
         
-        /* --- DESIGN COLORS --- */
-        
-        /* 1. Tipper Name: Neon Red */
+        /* Neon Red User */
         .highlight { 
             color: #FF0039; 
             text-shadow: 0 0 20px #FF0039, 0 0 10px #FF0039; 
+            font-size: 42px;
         } 
         
-        /* 2. Amount: Neon Green */
+        /* Neon Green Amount */
         .amount { 
-            color: #39FF14; /* Neon Green */
-            font-size: 50px; 
-            display: block; 
-            margin: 10px 0; 
+            color: #39FF14; 
+            font-size: 55px; 
             text-shadow: 0 0 20px #39FF14, 0 0 10px #39FF14; 
         }
+
+        /* "Just Dropped" text style */
+        .mid-text { font-size: 20px; color: #ccc; vertical-align: middle; }
         
-        /* 3. Message: White */
+        /* White Message */
         .message { 
             font-size: 24px; 
             color: #FFFFFF; 
             margin-top: 20px; 
             font-weight: normal; 
-            font-family: 'Knocky', sans-serif;
             text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
         }
         
         .alert-image { 
             width: 100px; 
             height: 100px; 
-            border: 3px solid #FF0039; /* Matched border to Red */
+            border: 3px solid #FF0039; 
             border-radius: 50%; 
             object-fit: cover; 
             box-shadow: 0 0 15px #FF0039; 
+            margin-bottom: 15px;
         }
     </style>
 </head>
@@ -93,12 +114,21 @@
 
     <div id="alert-box">
         <img id="alert-image" class="alert-image" src="https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3pnaGo1dmYwaTJ4aXVtYjFhZm5jd3RzNTViMmgwdzFiejc3MjZoaiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26gsjCZpPolPr3sBy/giphy.gif">
-        <h1 class="alert-text">
-            <span id="sender" class="highlight">USER</span> <br> 
-            JUST DROPPED <br> 
-            <span id="amount" class="amount">500</span>
-        </h1>
-        <p class="message" id="message-text">Message goes here...</p>
+        
+        <div class="alert-text">
+            <div id="sender-container" class="reveal-element">
+                <span id="sender" class="highlight">USER NAME</span>
+            </div>
+            
+            <div id="amount-container" class="reveal-element">
+                <span class="mid-text">JUST DROPPED</span><br>
+                <span id="amount" class="amount">500</span>
+            </div>
+        </div>
+
+        <div id="message-container" class="reveal-element">
+            <p class="message" id="message-text">Message goes here...</p>
+        </div>
     </div>
 
     <script>
@@ -107,14 +137,12 @@
         var isPlaying = false;
         var availableVoices = [];
 
-        // 1. Force Load Voices
         function loadVoices() {
             availableVoices = window.speechSynthesis.getVoices();
         }
         window.speechSynthesis.onvoiceschanged = loadVoices;
         loadVoices(); 
 
-        // 2. Connection Logic
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
         if (!uuid) uuid = pathParts[pathParts.length - 2];
@@ -132,47 +160,42 @@
             startAlertSequence(data);
         }
 
-        // --- 3. SEQUENCE LOGIC (Sound -> Popup -> TTS) ---
         function startAlertSequence(data) {
             var sound = document.getElementById('notification-sound');
             var box = document.getElementById('alert-box');
 
-            // Update Text Before Showing
+            // 1. Update Content
             var senderName = data.tipper || "Anonymous";
             if(document.getElementById('sender')) document.getElementById('sender').innerText = senderName;
             if(document.getElementById('amount')) document.getElementById('amount').innerText = "₹" + data.amount;
             if(document.getElementById('message-text')) document.getElementById('message-text').innerText = `"${data.message}"`;
 
-            // Step A: Play Sound
-            // Reset sound to start (in case it was played before)
+            // 2. Play Sound
             sound.currentTime = 0;
             var playPromise = sound.play();
 
             if (playPromise !== undefined) {
                 playPromise.then(_ => {
-                    // Audio started successfully
-                    // We wait for it to end before showing popup
                     sound.onended = function() {
-                        showPopupAndSpeak(data, box);
+                        showPopupAndAnimate(data, box);
                     };
                 }).catch(error => {
-                    console.log("Audio play failed (browser blocked?):", error);
-                    // Fallback: Skip sound, go straight to popup
-                    showPopupAndSpeak(data, box);
+                    console.log("Audio block:", error);
+                    showPopupAndAnimate(data, box);
                 });
             } else {
-                 showPopupAndSpeak(data, box);
+                 showPopupAndAnimate(data, box);
             }
         }
 
-        function showPopupAndSpeak(data, box) {
-            // Step B: Show Popup
+        function showPopupAndAnimate(data, box) {
+            // 3. Show Box (Triggers CSS Animations for text)
             box.classList.add('show');
 
-            // Step C: Wait slightly for animation (0.5s), then Speak
+            // 4. Wait for Animations to finish (1.5s total) before Speaking
             setTimeout(() => {
                 speakTTS(data, box);
-            }, 500); 
+            }, 1600); 
         }
 
         function speakTTS(data, box) {
@@ -182,14 +205,12 @@
             }
 
             window.speechSynthesis.cancel();
-
             var senderName = data.tipper || "Anonymous";
             var cleanMessage = data.message.replace(/[^a-zA-Z0-9 \u0900-\u097F]/g, ""); 
             var textToSpeak = `${senderName} sent ${data.amount} rupees. ${cleanMessage}`;
             
             var utter = new SpeechSynthesisUtterance(textToSpeak);
-
-            // Voice Selection Logic
+            
             var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
             var targetVoice = null;
 
@@ -205,7 +226,7 @@
             utter.rate = 1.1; 
             
             utter.onend = () => finishAlert(box);
-            utter.onerror = (e) => { console.error("TTS Error:", e); finishAlert(box); };
+            utter.onerror = (e) => { finishAlert(box); };
             
             window.speechSynthesis.speak(utter);
         }
@@ -219,4 +240,3 @@
     </script>
 </body>
 </html>
-
