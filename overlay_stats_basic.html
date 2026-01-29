@@ -2,20 +2,28 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Basic Gold Stats</title>
+    <title>BASIC Gold Stats</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        /* --- FONT SETUP (Basic) --- */
-        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
+        /* --- FONT SETUP --- */
+        /* If you have the font file locally, ensure the path is correct below */
+        @font-face {
+            font-family: 'Knocky';
+            src: url('Knocky-SemiBold.woff2') format('woff2'),
+                 url('Knocky-SemiBold.ttf') format('truetype');
+            font-weight: 600;
+            font-style: normal;
+        }
         
         body { 
             margin: 0; padding: 20px; 
             overflow: hidden; 
             background: transparent; 
-            font-family: 'Montserrat', sans-serif; 
+            /* Fallback to Impact or sans-serif if Knocky isn't found */
+            font-family: 'Knocky', 'Impact', sans-serif; 
         }
 
-        #container {
+        #basic-container {
             width: 600px; 
             display: flex;
             flex-direction: column;
@@ -24,21 +32,21 @@
 
         /* --- THE BAR DESIGN --- */
         .stat-bar {
-            background: #000; 
-            border: 2px solid #FFD700; /* Reverted to Gold */
+            background: #000; /* Back remains same (Black) */
+            border: 2px solid #FF0039; /* Neon Red Border */
             border-radius: 8px; 
             padding: 5px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
-            box-shadow: 0 0 15px rgba(255, 215, 0, 0.2); /* Gold Glow */
+            box-shadow: 0 0 15px rgba(255, 0, 57, 0.4); /* Neon Red Glow */
             height: 50px;
             position: relative;
             overflow: hidden;
         }
 
-        /* Glossy Shine Effect */
+        /* Glossy Shine Effect (Kept Same) */
         .stat-bar::after {
             content: "";
             position: absolute;
@@ -59,8 +67,9 @@
         .value-text {
             font-size: 24px;
             font-weight: 900;
-            color: #FFD700; /* Reverted to Gold */
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5); /* Basic shadow */
+            color: #FF0039; /* Neon Red Color */
+            /* Neon Glow Text Shadow */
+            text-shadow: 0 0 5px rgba(255, 0, 57, 0.8), 0 0 10px rgba(255, 0, 57, 0.5);
             text-transform: uppercase;
             letter-spacing: 1px;
         }
@@ -79,7 +88,7 @@
 </head>
 <body>
 
-    <div id="container">
+    <div id="basic-container">
         
         <div class="stat-bar">
             <span class="label-text">#1 XDTIPPER</span>
@@ -137,6 +146,7 @@
             document.getElementById('top-one-name').innerText = topText;
 
             // B. START BOTTOM BAR ROTATION
+            // Ensure we don't start multiple intervals
             if (window.rotatorInterval) clearInterval(window.rotatorInterval);
             
             rotateBottomBar(); // Run once immediately
