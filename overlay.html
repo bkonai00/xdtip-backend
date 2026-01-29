@@ -2,137 +2,204 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Minimal Stats</title>
+    <title>Classic Overlay</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        /* --- FONT SETUP (Classic/Royal Style) --- */
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap');
         
-        body { margin: 0; padding: 20px; overflow: hidden; background: transparent; font-family: 'Inter', sans-serif; }
-
-        /* MINIMAL BOX */
-        #stats-container {
-            width: 280px;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 12px;
-            padding: 20px; color: #333;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: transparent; 
+            height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-family: 'Cinzel', serif; /* Classic Font */
         }
-
-        .label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
-
-        /* ROTATOR */
-        .rotator-box { display: flex; align-items: center; justify-content: space-between; height: 40px; }
         
-        .tipper-name { 
-            font-size: 18px; font-weight: 800; color: #222; 
-            opacity: 0; transition: opacity 0.5s;
+        #alert-box {
+            text-align: center; 
+            opacity: 0; 
+            /* Classic = No Skew, Standard Scaling */
+            transform: scale(0.9); 
+            transition: all 0.5s ease-in-out;
+            
+            /* Classic Design: Dark Background + Gold Borders */
+            background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+            padding: 40px 60px; 
+            
+            /* Double Gold Border for "Frame" effect */
+            border: 4px double #D4AF37; 
+            border-radius: 8px; /* Slightly rounded */
+            
+            min-width: 500px;
+            
+            /* Warm Gold Shadow */
+            box-shadow: 0 0 25px rgba(212, 175, 55, 0.3), inset 0 0 10px rgba(0,0,0,0.8);
         }
-        .tipper-amount { 
-            font-size: 16px; color: #2ecc71; font-weight: 700; background: #eafff2; padding: 2px 8px; border-radius: 6px;
-            opacity: 0; transition: opacity 0.5s;
+        
+        #alert-box.show { 
+            opacity: 1; 
+            transform: scale(1); 
         }
-        .visible { opacity: 1 !important; }
-
-        .rank-badge { 
-            background: #222; color: #fff; width: 20px; height: 20px; display: inline-flex; 
-            align-items: center; justify-content: center; border-radius: 50%; font-size: 10px; margin-right: 8px;
+        
+        .alert-text { 
+            font-size: 32px; 
+            color: #f0f0f0; 
+            margin: 15px 0 0 0; 
+            text-transform: uppercase; 
+            letter-spacing: 2px;
+            font-weight: 700;
         }
-
-        /* LATEST LIST */
-        .divider { height: 1px; background: #eee; margin: 15px 0; }
-        .latest-list { list-style: none; padding: 0; margin: 0; }
-        .latest-item { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: #555; }
-        .latest-amt { color: #2ecc71; font-weight: 600; }
+        
+        /* The Tipper Name */
+        .highlight { 
+            color: #D4AF37; /* Gold */
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            font-weight: 900;
+            display: block;
+            font-size: 40px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+            padding-bottom: 5px;
+        } 
+        
+        /* The Amount */
+        .amount { 
+            color: #fff; 
+            font-size: 56px; 
+            display: block; 
+            margin: 15px 0; 
+            text-shadow: 0 0 15px rgba(212, 175, 55, 0.6); 
+            font-weight: 900;
+        }
+        
+        /* The Message */
+        .message { 
+            font-size: 20px; 
+            color: #ccc; 
+            margin-top: 20px; 
+            font-weight: normal; 
+            font-family: 'Lato', sans-serif; /* Clean font for readability */
+            font-style: italic;
+        }
+        
+        .alert-image { 
+            width: 110px; 
+            height: 110px; 
+            border: 3px solid #D4AF37; /* Gold Border */
+            border-radius: 50%; 
+            object-fit: cover; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
+            background: #000;
+        }
     </style>
 </head>
 <body>
-    <div id="stats-container">
-        <div class="label">Top Supporter</div>
-        <div class="rotator-box">
-            <div style="display:flex; align-items:center;">
-                <span id="rank" class="rank-badge">1</span>
-                <span id="rotator-name" class="tipper-name">Loading...</span>
-            </div>
-            <span id="rotator-amount" class="tipper-amount">0</span>
-        </div>
-        <div class="divider"></div>
-        <div class="label">Recent Tips</div>
-        <ul id="latest-list" class="latest-list"></ul>
+    <div id="alert-box">
+        <img id="alert-image" class="alert-image" src="https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3pnaGo1dmYwaTJ4aXVtYjFhZm5jd3RzNTViMmgwdzFiejc3MjZoaiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26gsjCZpPolPr3sBy/giphy.gif">
+        
+        <h1 class="alert-text">
+            <span id="sender" class="highlight">USER</span> 
+            JUST CONTRIBUTED
+            <span id="amount" class="amount">500</span>
+        </h1>
+        
+        <p class="message" id="message-text">Message goes here...</p>
     </div>
 
     <script>
-        var socket = io(); var topTippers = []; var currentIndex = 0;
+        var socket = io(); 
+        var queue = []; 
+        var isPlaying = false;
+        var availableVoices = [];
+
+        // 1. Force Load Voices
+        function loadVoices() {
+            availableVoices = window.speechSynthesis.getVoices();
+            console.log("🎤 Available Voices:", availableVoices.map(v => v.name));
+        }
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+        loadVoices(); 
+
+        // 2. Connection Logic
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
-        if (uuid) { socket.emit('join-overlay', uuid); fetchStats(); }
-        
-        // --- TTS CONFIGURATION ---
-        // Native browser TTS supports emojis automatically (e.g. ❤️ reads as "Red Heart")
-        const enableTTS = true; 
-        
-        async function fetchStats() {
-            try {
-                const res = await fetch(`/stats/${uuid}`);
-                const data = await res.json();
-                topTippers = data.top; 
-                if (topTippers.length > 0) { showNextTipper(); setInterval(showNextTipper, 3000); }
-                else { 
-                     var n = document.getElementById('rotator-name');
-                     n.innerText = "No Data"; n.classList.add('visible');
-                     document.getElementById('rotator-amount').classList.add('visible');
+        if (!uuid) uuid = pathParts[pathParts.length - 2];
+
+        if (uuid && uuid !== "overlay") {
+            socket.emit('join-overlay', uuid);
+        }
+
+        socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
+
+        function processQueue() {
+            if (isPlaying || queue.length === 0) return;
+            isPlaying = true;
+            var data = queue.shift();
+            showAlert(data);
+        }
+
+        function showAlert(data) {
+            var senderName = data.tipper || "Anonymous";
+            
+            // UI Updates
+            if(document.getElementById('sender')) document.getElementById('sender').innerText = senderName;
+            if(document.getElementById('amount')) document.getElementById('amount').innerText = "₹" + data.amount;
+            if(document.getElementById('message-text')) document.getElementById('message-text').innerText = `"${data.message}"`;
+            
+            var box = document.getElementById('alert-box');
+            box.classList.add('show');
+
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+                
+                // Clean the text to remove special symbols that might confuse TTS
+                var cleanMessage = data.message.replace(/[^a-zA-Z0-9 \u0900-\u097F]/g, ""); 
+                var textToSpeak = `${senderName} sent ${data.amount} rupees. ${cleanMessage}`;
+                
+                var utter = new SpeechSynthesisUtterance(textToSpeak);
+
+                // --- SMART LANGUAGE & VOICE SELECTOR ---
+                var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
+                var targetVoice = null;
+
+                if (hasHindiScript) {
+                    utter.lang = 'hi-IN'; 
+                    targetVoice = availableVoices.find(v => v.name.includes('Hemant')) || 
+                                  availableVoices.find(v => v.lang.includes('hi'));
+                } else {
+                    utter.lang = 'en-IN'; 
+                    targetVoice = availableVoices.find(v => v.name.includes('Ravi')) || 
+                                  availableVoices.find(v => v.name.includes('Mark')) || 
+                                  availableVoices.find(v => v.lang.includes('en-IN'));
                 }
-                updateLatestList(data.latest);
-            } catch(e) {}
+
+                if (targetVoice) {
+                    utter.voice = targetVoice;
+                }
+
+                utter.rate = 1.1; 
+                utter.pitch = 1.0;
+
+                utter.onend = () => finishAlert(box);
+                utter.onerror = (e) => { console.error("TTS Error:", e); finishAlert(box); };
+                
+                window.speechSynthesis.speak(utter);
+            } else { 
+                setTimeout(() => finishAlert(box), 4000); 
+            }
         }
 
-        function showNextTipper() {
-            if (topTippers.length === 0) return;
-            var nameEl = document.getElementById('rotator-name');
-            var amtEl = document.getElementById('rotator-amount');
-            var rankEl = document.getElementById('rank');
-            nameEl.classList.remove('visible'); amtEl.classList.remove('visible');
-            setTimeout(() => {
-                var tipper = topTippers[currentIndex];
-                nameEl.innerText = tipper.sender_name || "Anon";
-                amtEl.innerText = "₹" + tipper.amount;
-                rankEl.innerText = (currentIndex + 1);
-                nameEl.classList.add('visible'); amtEl.classList.add('visible');
-                currentIndex++; if (currentIndex >= topTippers.length) currentIndex = 0;
-            }, 500);
+        function finishAlert(box) {
+            setTimeout(() => { 
+                box.classList.remove('show'); 
+                setTimeout(() => { isPlaying = false; processQueue(); }, 1000); 
+            }, 2000);
         }
-
-        function updateLatestList(d) {
-            var l = document.getElementById('latest-list'); l.innerHTML = "";
-            d.forEach(t => {
-                l.innerHTML += `<li class="latest-item"><span>${t.sender_name}</span><span class="latest-amt">₹${t.amount}</span></li>`;
-            });
-        }
-
-        // --- TTS FUNCTION ---
-        function speakTip(data) {
-            if (!enableTTS || !window.speechSynthesis) return;
-            
-            // Construct text. Includes message so emojis are read out.
-            // Example: "John sent ₹500. Hello World <emoji>"
-            const name = data.sender_name || "Anonymous";
-            const amount = data.amount || 0;
-            const message = data.message || ""; 
-            
-            const textToSpeak = `${name} sent ${amount} rupees. ${message}`;
-            
-            const utterance = new SpeechSynthesisUtterance(textToSpeak);
-            utterance.rate = 1; // Speed
-            utterance.pitch = 1; // Pitch
-            utterance.lang = 'en-US'; // Or 'hi-IN' for Indian accent if preferred
-            
-            window.speechSynthesis.speak(utterance);
-        }
-
-        // Updated Socket Listener to accept data
-        socket.on('new-tip', (data) => { 
-            fetchStats(); 
-            if(data) speakTip(data); 
-        });
     </script>
 </body>
 </html>
