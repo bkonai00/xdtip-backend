@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Premium Neon Overlay</title>
+    <title>basicgamerz Overlay</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         /* --- FONT SETUP --- */
@@ -25,104 +25,96 @@
             font-family: 'Knocky', sans-serif;
         }
         
-        /* --- PREMIUM CARD DESIGN --- */
+        /* --- LAYOUT CONTAINER --- */
         #alert-box {
             text-align: center; 
             opacity: 0; 
-            transform: translateY(30px) scale(0.9); 
-            transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1); /* smooth pop-up */
+            transform: scale(0.9); 
+            transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
             
-            /* Premium Dark Glass Background */
-            background: linear-gradient(145deg, rgba(30,30,30,0.95) 0%, rgba(0,0,0,0.98) 100%);
-            backdrop-filter: blur(10px);
+            /* TRANSPARENT BACKGROUND - NO BOX */
+            background: transparent;
+            padding: 20px; 
+            min-width: 500px;
             
-            padding: 40px 50px; 
-            min-width: 550px;
-            border-radius: 20px;
+            /* No Border around the container */
+            border: none;
+            box-shadow: none;
             
-            /* Subtle Glass Border + Red Glow */
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 
-                0 20px 50px rgba(0,0,0,0.8), /* Deep shadow */
-                0 0 30px rgba(255, 0, 57, 0.2); /* Soft Red Ambient Glow */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        #alert-box.show { opacity: 1; transform: scale(1); }
+        
+        /* --- GIF STYLE (Full, No Round Border) --- */
+        .alert-image { 
+            /* Adjustable size - keeps aspect ratio */
+            height: 150px; 
+            width: auto; 
             
-            position: relative;
-            overflow: hidden;
+            /* REMOVED CIRCLE & BORDER */
+            border-radius: 0; 
+            border: none;
+            
+            /* Shadow to make the GIF pop */
+            filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));
+            
+            margin-bottom: 10px;
+            object-fit: contain; /* Shows full image */
         }
 
-        /* Glossy Shine on Top */
-        #alert-box::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-        }
-        
-        #alert-box.show { opacity: 1; transform: translateY(0) scale(1); }
-        
         /* --- TYPOGRAPHY --- */
         .alert-text { 
             font-size: 32px; 
             color: #fff; 
-            margin: 10px 0; 
+            margin: 5px 0; 
             text-transform: uppercase; 
             letter-spacing: 1px;
-            line-height: 1.3;
+            /* Strong Shadow for readability on transparent bg */
+            text-shadow: 2px 2px 4px #000, 0 0 10px rgba(0,0,0,0.8);
         }
         
         /* 1. USER: Neon Red */
         #sender { 
             color: #FF0039; 
-            font-size: 42px;
+            font-size: 48px;
             display: block;
-            margin-bottom: 5px;
-            text-shadow: 0 0 15px rgba(255, 0, 57, 0.8); 
+            margin-bottom: 0px;
+            /* Neon Glow + Black Outline */
+            text-shadow: 0 0 20px #FF0039, 3px 3px 0 #000;
         } 
         
         /* Helper Text */
         .sub-text {
-            font-size: 18px;
-            color: #888;
-            font-weight: normal;
+            font-size: 20px;
+            color: #ddd;
             vertical-align: middle;
             margin: 0 10px;
+            text-shadow: 2px 2px 0 #000;
         }
         
         /* 2. AMOUNT: Bright Green */
         #amount { 
             color: #00FF00; 
-            font-size: 52px; 
+            font-size: 55px; 
             display: inline-block;
-            text-shadow: 0 0 15px rgba(0, 255, 0, 0.8); 
+            /* Neon Glow + Black Outline */
+            text-shadow: 0 0 20px #00FF00, 3px 3px 0 #000;
         }
         
         /* 3. MESSAGE: Bright White */
         .message { 
-            font-size: 26px; 
+            font-size: 28px; 
             color: #FFFFFF; 
-            margin-top: 25px; 
-            padding-top: 20px;
-            border-top: 1px solid rgba(255,255,255,0.1); /* Separator line */
+            margin-top: 15px; 
             font-weight: normal; 
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            /* Heavy Shadow for visibility */
+            text-shadow: 2px 2px 4px #000, 0 0 10px #000;
+            max-width: 600px;
             line-height: 1.4;
         }
-        
-        /* Image Style */
-        .alert-image { 
-            width: 110px; 
-            height: 110px; 
-            border: 4px solid #FF0039; /* Red Border matching User */
-            border-radius: 50%; 
-            object-fit: cover; 
-            box-shadow: 0 5px 20px rgba(0,0,0,0.5); 
-            margin-bottom: 10px;
-            margin-top: -60px; /* Pulls image up to overlap the top edge slightly for style */
-            background: #000;
-        }
-        
-        /* Spacer to push content down since image is pulled up */
-        .spacer { height: 10px; }
 
     </style>
 </head>
@@ -131,12 +123,12 @@
     <div id="alert-box">
         <img id="alert-image" class="alert-image" src="https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3pnaGo1dmYwaTJ4aXVtYjFhZm5jd3RzNTViMmgwdzFiejc3MjZoaiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26gsjCZpPolPr3sBy/giphy.gif">
         
-        <div class="spacer"></div>
-
         <div class="alert-text">
             <span id="sender">USER</span>
-            <span class="sub-text">SENT</span>
-            <span id="amount">₹500</span>
+            <div>
+                <span class="sub-text">JUST DROPPED</span>
+                <span id="amount">₹500</span>
+            </div>
         </div>
 
         <p class="message" id="message-text">Message goes here...</p>
@@ -177,8 +169,7 @@
             if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
                 
-                // --- CHANGED HERE: Removed the regex that stripped special chars/emojis ---
-                // We now use the raw message so the browser reads emojis (e.g. "Red Heart")
+                // Uses raw message (emojis allowed)
                 var messageToSpeak = data.message; 
                 
                 var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount} rupees. ${messageToSpeak}`);
