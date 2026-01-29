@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Basic Overlay</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        /* --- FONT SETUP --- */
+        @font-face {
+            font-family: 'Knocky';
+            src: url('Knocky-SemiBold.woff2') format('woff2'),
+                 url('Knocky-SemiBold.ttf') format('truetype');
+            font-weight: 600;
+            font-style: normal;
+        }
+        
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: transparent; 
+            height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-family: 'Knocky', sans-serif; /* Updated Font */
+        }
+        
+        #alert-box {
+            text-align: center; 
+            opacity: 0; 
+            transform: skewX(-10deg) scale(0.8); 
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+            background: rgba(0, 0, 0, 0.9); 
+            padding: 40px; 
+            border: 4px solid #ff00ff;
+            box-shadow: 0 0 30px #ff00ff, inset 0 0 20px #ff00ff; 
+            border-radius: 0px; 
+            min-width: 500px;
+        }
+        
+        #alert-box.show { opacity: 1; transform: skewX(-10deg) scale(1); }
+        
+        .alert-text { 
+            font-size: 36px; 
+            color: #fff; 
+            margin: 0; 
+            text-transform: uppercase; 
+            text-shadow: 0 0 10px #fff; 
+            letter-spacing: 1px;
+        }
+        
+        .highlight { color: #00ffff; text-shadow: 0 0 20px #00ffff; } 
+        
+        .amount { 
+            color: #ff00ff; 
+            font-size: 50px; 
+            display: block; 
+            margin: 10px 0; 
+            text-shadow: 0 0 20px #ff00ff; 
+        }
+        
+        .message { 
+            font-size: 22px; 
+            color: #ddd; 
+            margin-top: 20px; 
+            font-weight: normal; 
+            font-family: 'Knocky', sans-serif; /* Consistent font */
+        }
+        
+        .alert-image { 
+            width: 100px; 
+            height: 100px; 
+            border: 3px solid #00ffff; 
+            border-radius: 50%; 
+            object-fit: cover; 
+            box-shadow: 0 0 15px #00ffff; 
+        }
+    </style>
+</head>
+<body>
+    <div id="alert-box">
+        <img id="alert-image" class="alert-image" src="https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3pnaGo1dmYwaTJ4aXVtYjFhZm5jd3RzNTViMmgwdzFiejc3MjZoaiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26gsjCZpPolPr3sBy/giphy.gif">
+        <h1 class="alert-text"><span id="sender" class="highlight">USER</span> <br> JUST DROPPED <br> <span id="amount" class="amount">500</span></h1>
+        <p class="message" id="message-text">Message goes here...</p>
+    </div>
+
+    <script>
+        var socket = io(); 
+        var queue = []; 
+        var isPlaying = false;
+        var availableVoices = [];
+
+        // 1. Force Load Voices
+        function loadVoices() {
+            availableVoices = window.speechSynthesis.getVoices();
+            console.log("🎤 Available Voices:", availableVoices.map(v => v.name));
+        }
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+        loadVoices(); 
+
+        // 2. Connection Logic
+        var pathParts = window.location.pathname.split('/');
+        var uuid = pathParts[pathParts.length - 1]; 
+        if (!uuid) uuid = pathParts[pathParts.length - 2];
+
+        if (uuid && uuid !== "overlay") {
+            socket.emit('join-overlay', uuid);
+        }
+
+        socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
+
+        function processQueue() {
+            if (isPlaying || queue.length === 0) return;
+            isPlaying = true;
+            var data = queue.shift();
+            showAlert(data);
+        }
+
+        function showAlert(data) {
+            var senderName = data.tipper || "Anonymous";
+            
+            // UI Updates
+            if(document.getElementById('sender')) document.getElementById('sender').innerText = senderName;
+            if(document.getElementById('amount')) document.getElementById('amount').innerText = "₹" + data.amount;
+            if(document.getElementById('message-text')) document.getElementById('message-text').innerText = `"${data.message}"`;
+            
+            var box = document.getElementById('alert-box');
+            box.classList.add('show');
+
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+                
+                // Clean the text to remove special symbols that might confuse TTS
+                var cleanMessage = data.message.replace(/[^a-zA-Z0-9 \u0900-\u097F]/g, ""); 
+                var textToSpeak = `${senderName} sent ${data.amount} rupees. ${cleanMessage}`;
+                
+                var utter = new SpeechSynthesisUtterance(textToSpeak);
+
+                // --- ⚠️ FIX: SMART LANGUAGE & VOICE SELECTOR ⚠️ ---
+                
+                var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
+                var targetVoice = null;
+
+                if (hasHindiScript) {
+                    // === HINDI (Devanagari) ===
+                    // Forces Hindi pronunciation rules
+                    utter.lang = 'hi-IN'; 
+                    targetVoice = availableVoices.find(v => v.name.includes('Hemant')) || 
+                                  availableVoices.find(v => v.lang.includes('hi'));
+                } else {
+                    // === HINGLISH / ENGLISH ===
+                    // ⚠️ CRITICAL FIX: Force 'en-IN' so it reads "Pareekshan" as a word, not letters
+                    utter.lang = 'en-IN'; 
+                    
+                    targetVoice = availableVoices.find(v => v.name.includes('Ravi')) || 
+                                  availableVoices.find(v => v.name.includes('Mark')) || 
+                                  availableVoices.find(v => v.lang.includes('en-IN'));
+                }
+
+                if (targetVoice) {
+                    console.log("🗣️ Voice:", targetVoice.name, "| Lang:", utter.lang);
+                    utter.voice = targetVoice;
+                }
+
+                // Make it slightly faster so Hinglish flows better
+                utter.rate = 1.1; 
+                utter.pitch = 1.0;
+
+                utter.onend = () => finishAlert(box);
+                utter.onerror = (e) => { console.error("TTS Error:", e); finishAlert(box); };
+                
+                window.speechSynthesis.speak(utter);
+            } else { 
+                setTimeout(() => finishAlert(box), 4000); 
+            }
+        }
+
+        function finishAlert(box) {
+            setTimeout(() => { 
+                box.classList.remove('show'); 
+                setTimeout(() => { isPlaying = false; processQueue(); }, 1000); 
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
