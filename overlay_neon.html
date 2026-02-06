@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer">
     <title>Neon Overlay</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
@@ -27,7 +28,11 @@
 <body>
     <div id="alert-box">
         <img id="alert-image" src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExODk1bDAycnU4dGlhcmVxaHl1cDVyeXgyNzhzdTNqbWp5YWdqNHQ4cCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/R0gIPkjPXY707X7nBI/giphy.gif">
-        <h1 class="alert-text"><span id="sender" class="highlight">USER</span> <br> JUST DROPPED <br> <span id="amount" class="amount">500</span></h1>
+        <h1 class="alert-text">
+            <span id="sender" class="highlight">USER</span> <br> 
+            JUST DROPPED <br> 
+            <span id="amount" class="amount">500</span>
+        </h1>
         <p class="message" id="message-text">Message goes here...</p>
     </div>
 
@@ -35,24 +40,12 @@
         var socket = io(); 
         var queue = []; 
         var isPlaying = false;
-        var availableVoices = [];
 
-        // 1. Force Load Voices
-        function loadVoices() {
-            availableVoices = window.speechSynthesis.getVoices();
-            console.log("🎤 Available Voices:", availableVoices.map(v => v.name));
-        }
-        window.speechSynthesis.onvoiceschanged = loadVoices;
-        loadVoices(); 
-
-        // 2. Connection Logic
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
         if (!uuid) uuid = pathParts[pathParts.length - 2];
 
-        if (uuid && uuid !== "overlay") {
-            socket.emit('join-overlay', uuid);
-        }
+        if (uuid && uuid !== "overlay") { socket.emit('join-overlay', uuid); }
 
         socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
 
@@ -65,67 +58,57 @@
 
         function showAlert(data) {
             var senderName = data.tipper || "Anonymous";
+            var messageText = data.message || "Thank you for the support!";
             
-            // UI Updates
+            // Update Text
             if(document.getElementById('sender')) document.getElementById('sender').innerText = senderName;
             if(document.getElementById('amount')) document.getElementById('amount').innerText = "₹" + data.amount;
-            if(document.getElementById('message-text')) document.getElementById('message-text').innerText = `"${data.message}"`;
+            if(document.getElementById('message-text')) document.getElementById('message-text').innerText = `"${messageText}"`;
             
+            // Show Box
             var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            if (window.speechSynthesis) {
-                window.speechSynthesis.cancel();
-                
-                // Clean the text to remove special symbols that might confuse TTS
-                var cleanMessage = data.message.replace(/[^a-zA-Z0-9 \u0900-\u097F]/g, ""); 
-                var textToSpeak = `${senderName} sent ${data.amount} rupees. ${cleanMessage}`;
-                
-                var utter = new SpeechSynthesisUtterance(textToSpeak);
+            // --- FIXED ROBUST TTS LOGIC ---
+            
+            // 1. Prepare Text
+            var fullText = `${senderName} sent ${data.amount} rupees. ${messageText}`;
+            
+            // 2. Detect Language
+            var hasHindiScript = /[\u0900-\u097F]/.test(fullText);
+            var lang = hasHindiScript ? 'hi' : 'en'; 
+            
+            // 3. Robust URL Generation (Prevents 403 Blocking)
+            // We use 'idx=0', 'total=1', and 'client=tw-ob' to look like a real browser
+            var safeText = encodeURIComponent(fullText.substring(0, 200)); 
+            var audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${safeText}&tl=${lang}&total=1&idx=0&textlen=${safeText.length}&client=tw-ob&prev=input&ttsspeed=1`;
 
-                // --- ⚠️ FIX: SMART LANGUAGE & VOICE SELECTOR ⚠️ ---
-                
-                var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
-                var targetVoice = null;
+            var audio = new Audio(audioUrl);
+            
+            // 4. Events
+            audio.onended = () => finishAlert(box);
+            
+            // Safety: If audio fails/blocks, close box after 5s anyway
+            audio.onerror = () => {
+                console.error("Audio failed to load (Check OBS/Network)");
+                setTimeout(() => finishAlert(box), 5000); 
+            };
 
-                if (hasHindiScript) {
-                    // === HINDI (Devanagari) ===
-                    // Forces Hindi pronunciation rules
-                    utter.lang = 'hi-IN'; 
-                    targetVoice = availableVoices.find(v => v.name.includes('Hemant')) || 
-                                  availableVoices.find(v => v.lang.includes('hi'));
-                } else {
-                    // === HINGLISH / ENGLISH ===
-                    // ⚠️ CRITICAL FIX: Force 'en-IN' so it reads "Pareekshan" as a word, not letters
-                    utter.lang = 'en-IN'; 
-                    
-                    targetVoice = availableVoices.find(v => v.name.includes('Ravi')) || 
-                                  availableVoices.find(v => v.name.includes('Mark')) || 
-                                  availableVoices.find(v => v.lang.includes('en-IN'));
-                }
-
-                if (targetVoice) {
-                    console.log("🗣️ Voice:", targetVoice.name, "| Lang:", utter.lang);
-                    utter.voice = targetVoice;
-                }
-
-                // Make it slightly faster so Hinglish flows better
-                utter.rate = 1.1; 
-                utter.pitch = 1.0;
-
-                utter.onend = () => finishAlert(box);
-                utter.onerror = (e) => { console.error("TTS Error:", e); finishAlert(box); };
-                
-                window.speechSynthesis.speak(utter);
-            } else { 
-                setTimeout(() => finishAlert(box), 4000); 
-            }
+            // Play
+            audio.play().catch(e => {
+                console.error("Autoplay blocked:", e);
+                // If blocked, wait 5s then close
+                setTimeout(() => finishAlert(box), 5000);
+            });
         }
 
         function finishAlert(box) {
             setTimeout(() => { 
                 box.classList.remove('show'); 
-                setTimeout(() => { isPlaying = false; processQueue(); }, 1000); 
+                setTimeout(() => { 
+                    isPlaying = false; 
+                    processQueue(); 
+                }, 1000); 
             }, 2000);
         }
     </script>
