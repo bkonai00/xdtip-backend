@@ -63,50 +63,77 @@
         <ul id="latest-list" class="latest-list"></ul>
     </div>
 
-    <script>
-        // ... (Use the exact script from the previous step) ...
-        // I will save space, but make sure to copy the <script> logic from your overlay_stats.html file!
-        var socket = io(); var topTippers = []; var currentIndex = 0;
+   <script>
+        var socket = io(); 
+        var queue = []; 
+        var isPlaying = false;
+
+        // We don't need loadVoices anymore because we are fetching audio files now
+        
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
-        if (uuid) { socket.emit('join-overlay', uuid); fetchStats(); }
-        
-        async function fetchStats() {
-            try {
-                const res = await fetch(`/stats/${uuid}`);
-                const data = await res.json();
-                topTippers = data.top; 
-                if (topTippers.length > 0) { showNextTipper(); setInterval(showNextTipper, 3000); }
-                else { 
-                     var n = document.getElementById('rotator-name');
-                     n.innerText = "No Data"; n.classList.add('visible');
-                     document.getElementById('rotator-amount').classList.add('visible');
-                }
-                updateLatestList(data.latest);
-            } catch(e) {}
+        if (!uuid) uuid = pathParts[pathParts.length - 2];
+
+        if (uuid && uuid !== "overlay") { socket.emit('join-overlay', uuid); }
+
+        socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
+
+        function processQueue() {
+            if (isPlaying || queue.length === 0) return;
+            isPlaying = true;
+            var data = queue.shift();
+            showAlert(data);
         }
-        function showNextTipper() {
-            if (topTippers.length === 0) return;
-            var nameEl = document.getElementById('rotator-name');
-            var amtEl = document.getElementById('rotator-amount');
-            var rankEl = document.getElementById('rank');
-            nameEl.classList.remove('visible'); amtEl.classList.remove('visible');
-            setTimeout(() => {
-                var tipper = topTippers[currentIndex];
-                nameEl.innerText = tipper.sender_name || "Anon";
-                amtEl.innerText = "₹" + tipper.amount;
-                rankEl.innerText = "#" + (currentIndex + 1);
-                nameEl.classList.add('visible'); amtEl.classList.add('visible');
-                currentIndex++; if (currentIndex >= topTippers.length) currentIndex = 0;
-            }, 300);
-        }
-        function updateLatestList(d) {
-            var l = document.getElementById('latest-list'); l.innerHTML = "";
-            d.forEach(t => {
-                l.innerHTML += `<li class="latest-item"><span>${t.sender_name}</span><span class="latest-amt">₹${t.amount}</span></li>`;
+
+        function showAlert(data) {
+            var senderName = data.tipper || "Anonymous";
+            // Update Text
+            document.getElementById('sender').innerText = senderName;
+            document.getElementById('amount').innerText = "₹" + data.amount;
+            document.getElementById('message-text').innerText = `"${data.message}"`;
+            
+            // Show Box
+            var box = document.getElementById('alert-box');
+            box.classList.add('show');
+
+            // --- THE NEW AUDIO LOGIC (OBS FRIENDLY) ---
+            
+            // 1. Prepare the text
+            var fullText = `${senderName} sent ${data.amount} rupees. ${data.message}`;
+            
+            // 2. Detect Language (Simple Check)
+            var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
+            var lang = hasHindiScript ? 'hi' : 'en'; // 'hi' for Hindi, 'en' for English
+            
+            // 3. Create the Google Translate TTS URL
+            // Note: We limit text to 200 chars to avoid API errors on this free hack
+            var safeText = encodeURIComponent(fullText.substring(0, 200)); 
+            var audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${safeText}`;
+
+            // 4. Play it as an Audio Object (This is what OBS can hear!)
+            var audio = new Audio(audioUrl);
+            
+            audio.onended = () => finishAlert(box);
+            audio.onerror = () => {
+                console.error("Audio failed to load.");
+                finishAlert(box); // Close anyway if audio fails
+            };
+
+            audio.play().catch(e => {
+                console.error("Autoplay blocked or error:", e);
+                finishAlert(box);
             });
         }
-        socket.on('new-tip', () => fetchStats());
+
+        function finishAlert(box) {
+            setTimeout(() => { 
+                box.classList.remove('show'); 
+                setTimeout(() => { 
+                    isPlaying = false; 
+                    processQueue(); 
+                }, 1000); 
+            }, 2000);
+        }
     </script>
 </body>
 </html>
