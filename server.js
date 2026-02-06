@@ -321,6 +321,26 @@ app.post('/test-alert', authenticateToken, (req, res) => {
     console.log(`Alert sent for ${username}: ${alertData.tipper}`);
     res.json({ success: true, message: "Alert Sent!" });
 });
+// ✅ NEW: REPLAY ALERT ENDPOINT
+// This receives the tip data from the dashboard and sends it to the overlay
+app.post('/replay-alert', authenticateToken, (req, res) => {
+    const username = req.user.username;
+    
+    // 1. Get the data sent from the dashboard
+    const { tipper, amount, message } = req.body;
+
+    console.log(`Replaying tip for ${username}: ${tipper} - ${amount}`);
+
+    // 2. Send to Overlay (Room = username in lowercase)
+    // We use the same 'new-tip' event so the overlay handles it normally
+    io.to(username.toLowerCase()).emit('new-tip', {
+        tipper: tipper || "Anonymous",
+        amount: amount || 0,
+        message: message || "Replay"
+    });
+
+    res.json({ success: true, message: "Replay Sent!" });
+});
 
 // J. Request Withdrawal
 app.post('/withdraw', authenticateToken, async (req, res) => {
@@ -534,6 +554,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
