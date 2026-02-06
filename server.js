@@ -321,25 +321,43 @@ app.post('/test-alert', authenticateToken, (req, res) => {
     console.log(`Alert sent for ${username}: ${alertData.tipper}`);
     res.json({ success: true, message: "Alert Sent!" });
 });
-// ✅ NEW: REPLAY ALERT ENDPOINT
-// This receives the tip data from the dashboard and sends it to the overlay
-app.post('/replay-alert', authenticateToken, (req, res) => {
-    const username = req.user.username;
-    
-    // 1. Get the data sent from the dashboard
-    const { tipper, amount, message } = req.body;
+// ✅ NEW: SMART REPLAY ALERT (Database Connected)
+app.post('/replay-alert', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const username = req.user.username;
 
-    console.log(`Replaying tip for ${username}: ${tipper} - ${amount}`);
+        // 1. Fetch the actual LAST tip from Supabase history
+        const { data: lastTip, error } = await supabase
+            .from('tips')
+            .select('sender_name, amount, message')
+            .eq('receiver_id', userId)            // Filter by current creator
+            .order('created_at', { ascending: false }) // Get newest first
+            .limit(1)                             // Only get one
+            .single();
 
-    // 2. Send to Overlay (Room = username in lowercase)
-    // We use the same 'new-tip' event so the overlay handles it normally
-    io.to(username.toLowerCase()).emit('new-tip', {
-        tipper: tipper || "Anonymous",
-        amount: amount || 0,
-        message: message || "Replay"
-    });
+        // 2. specific error handling
+        if (error || !lastTip) {
+            return res.status(404).json({ success: false, message: "No recent tips found in history." });
+        }
 
-    res.json({ success: true, message: "Replay Sent!" });
+        // 3. Prepare Alert Data
+        const alertData = {
+            tipper: lastTip.sender_name || "Anonymous",
+            amount: lastTip.amount,
+            message: lastTip.message
+        };
+
+        // 4. Send to OBS Overlay (same event 'new-tip')
+        io.to(username.toLowerCase()).emit('new-tip', alertData);
+        
+        console.log(`↺ Replayed last tip for ${username}: ${alertData.amount} from ${alertData.tipper}`);
+        res.json({ success: true, message: "Last tip replayed successfully!" });
+
+    } catch (err) {
+        console.error("Replay Error:", err);
+        res.status(500).json({ success: false, error: "Server Error during replay" });
+    }
 });
 
 // J. Request Withdrawal
@@ -554,6 +572,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
