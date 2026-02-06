@@ -38,24 +38,14 @@
         var socket = io(); 
         var queue = []; 
         var isPlaying = false;
-        var availableVoices = [];
 
-        // 1. Force Load Voices
-        function loadVoices() {
-            availableVoices = window.speechSynthesis.getVoices();
-            console.log("🎤 Available Voices:", availableVoices.map(v => v.name));
-        }
-        window.speechSynthesis.onvoiceschanged = loadVoices;
-        loadVoices(); 
-
-        // 2. Connection Logic
+        // We don't need loadVoices anymore because we are fetching audio files now
+        
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
         if (!uuid) uuid = pathParts[pathParts.length - 2];
 
-        if (uuid && uuid !== "overlay") {
-            socket.emit('join-overlay', uuid);
-        }
+        if (uuid && uuid !== "overlay") { socket.emit('join-overlay', uuid); }
 
         socket.on('new-tip', (data) => { queue.push(data); processQueue(); });
 
@@ -68,67 +58,51 @@
 
         function showAlert(data) {
             var senderName = data.tipper || "Anonymous";
+            // Update Text
+            document.getElementById('sender').innerText = senderName;
+            document.getElementById('amount').innerText = "₹" + data.amount;
+            document.getElementById('message-text').innerText = `"${data.message}"`;
             
-            // UI Updates
-            if(document.getElementById('sender')) document.getElementById('sender').innerText = senderName;
-            if(document.getElementById('amount')) document.getElementById('amount').innerText = "₹" + data.amount;
-            if(document.getElementById('message-text')) document.getElementById('message-text').innerText = `"${data.message}"`;
-            
+            // Show Box
             var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            if (window.speechSynthesis) {
-                window.speechSynthesis.cancel();
-                
-                // Clean the text to remove special symbols that might confuse TTS
-                var cleanMessage = data.message.replace(/[^a-zA-Z0-9 \u0900-\u097F]/g, ""); 
-                var textToSpeak = `${senderName} sent ${data.amount} rupees. ${cleanMessage}`;
-                
-                var utter = new SpeechSynthesisUtterance(textToSpeak);
+            // --- THE NEW AUDIO LOGIC (OBS FRIENDLY) ---
+            
+            // 1. Prepare the text
+            var fullText = `${senderName} sent ${data.amount} rupees. ${data.message}`;
+            
+            // 2. Detect Language (Simple Check)
+            var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
+            var lang = hasHindiScript ? 'hi' : 'en'; // 'hi' for Hindi, 'en' for English
+            
+            // 3. Create the Google Translate TTS URL
+            // Note: We limit text to 200 chars to avoid API errors on this free hack
+            var safeText = encodeURIComponent(fullText.substring(0, 200)); 
+            var audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${safeText}`;
 
-                // --- ⚠️ FIX: SMART LANGUAGE & VOICE SELECTOR ⚠️ ---
-                
-                var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
-                var targetVoice = null;
+            // 4. Play it as an Audio Object (This is what OBS can hear!)
+            var audio = new Audio(audioUrl);
+            
+            audio.onended = () => finishAlert(box);
+            audio.onerror = () => {
+                console.error("Audio failed to load.");
+                finishAlert(box); // Close anyway if audio fails
+            };
 
-                if (hasHindiScript) {
-                    // === HINDI (Devanagari) ===
-                    // Forces Hindi pronunciation rules
-                    utter.lang = 'hi-IN'; 
-                    targetVoice = availableVoices.find(v => v.name.includes('Hemant')) || 
-                                  availableVoices.find(v => v.lang.includes('hi'));
-                } else {
-                    // === HINGLISH / ENGLISH ===
-                    // ⚠️ CRITICAL FIX: Force 'en-IN' so it reads "Pareekshan" as a word, not letters
-                    utter.lang = 'en-IN'; 
-                    
-                    targetVoice = availableVoices.find(v => v.name.includes('Ravi')) || 
-                                  availableVoices.find(v => v.name.includes('Mark')) || 
-                                  availableVoices.find(v => v.lang.includes('en-IN'));
-                }
-
-                if (targetVoice) {
-                    console.log("🗣️ Voice:", targetVoice.name, "| Lang:", utter.lang);
-                    utter.voice = targetVoice;
-                }
-
-                // Make it slightly faster so Hinglish flows better
-                utter.rate = 1.1; 
-                utter.pitch = 1.0;
-
-                utter.onend = () => finishAlert(box);
-                utter.onerror = (e) => { console.error("TTS Error:", e); finishAlert(box); };
-                
-                window.speechSynthesis.speak(utter);
-            } else { 
-                setTimeout(() => finishAlert(box), 4000); 
-            }
+            audio.play().catch(e => {
+                console.error("Autoplay blocked or error:", e);
+                finishAlert(box);
+            });
         }
 
         function finishAlert(box) {
             setTimeout(() => { 
                 box.classList.remove('show'); 
-                setTimeout(() => { isPlaying = false; processQueue(); }, 1000); 
+                setTimeout(() => { 
+                    isPlaying = false; 
+                    processQueue(); 
+                }, 1000); 
             }, 2000);
         }
     </script>
