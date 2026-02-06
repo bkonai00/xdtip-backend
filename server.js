@@ -311,6 +311,22 @@ app.post('/test-alert', authenticateToken, (req, res) => {
     io.to(username.toLowerCase()).emit('new-tip', fakeTip);
     res.json({ success: true, message: "Test Alert Sent!" });
 });
+// --- NEW: REPLAY ALERT ENDPOINT ---
+// This allows the dashboard to replay a specific tip without saving it to DB
+app.post('/replay-alert', authenticateToken, (req, res) => {
+    const { tipper, amount, message } = req.body;
+    const username = req.user.username;
+
+    // Send to Overlay (Room = username in lowercase)
+    io.to(username.toLowerCase()).emit('new-tip', {
+        tipper: tipper || "Anonymous",
+        amount: amount || 0,
+        message: message || "Replay"
+    });
+
+    console.log(`Replayed tip for ${username}: ${tipper} - ${amount}`);
+    res.json({ success: true, message: "Replay Sent!" });
+});
 
 // J. Request Withdrawal
 app.post('/withdraw', authenticateToken, async (req, res) => {
@@ -524,6 +540,8 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+
 
 
 
