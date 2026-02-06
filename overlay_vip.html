@@ -49,12 +49,8 @@
     </div>
 
     <script>
-        var socket = io(); 
-        var queue = []; 
-        var isPlaying = false;
+        var socket = io(); var queue = []; var isPlaying = false;
 
-        // We don't need loadVoices anymore because we are fetching audio files now
-        
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
         if (!uuid) uuid = pathParts[pathParts.length - 2];
@@ -72,40 +68,39 @@
 
         function showAlert(data) {
             var senderName = data.tipper || "Anonymous";
-            // Update Text
             document.getElementById('sender').innerText = senderName;
             document.getElementById('amount').innerText = "₹" + data.amount;
             document.getElementById('message-text').innerText = `"${data.message}"`;
             
-            // Show Box
             var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // --- THE NEW AUDIO LOGIC (OBS FRIENDLY) ---
+            // --- USE STREAMELEMENTS API (Works in OBS Mixer) ---
+            var messageToSpeak = `${senderName} sent ${data.amount} rupees. ${data.message}`;
             
-            // 1. Prepare the text
-            var fullText = `${senderName} sent ${data.amount} rupees. ${data.message}`;
-            
-            // 2. Detect Language (Simple Check)
+            // Check for Hindi Characters
             var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
-            var lang = hasHindiScript ? 'hi' : 'en'; // 'hi' for Hindi, 'en' for English
             
-            // 3. Create the Google Translate TTS URL
-            // Note: We limit text to 200 chars to avoid API errors on this free hack
-            var safeText = encodeURIComponent(fullText.substring(0, 200)); 
-            var audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${safeText}`;
+            // Select Voice: 'Aditi' for Hindi, 'Brian' for English
+            var voiceName = hasHindiScript ? 'Aditi' : 'Brian'; 
+            
+            var encodedText = encodeURIComponent(messageToSpeak);
+            var audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${voiceName}&text=${encodedText}`;
 
-            // 4. Play it as an Audio Object (This is what OBS can hear!)
             var audio = new Audio(audioUrl);
             
+            // Cleanup when audio finishes
             audio.onended = () => finishAlert(box);
+            
+            // Handle errors (if API fails, close box anyway)
             audio.onerror = () => {
-                console.error("Audio failed to load.");
-                finishAlert(box); // Close anyway if audio fails
+                console.log("Audio Error");
+                finishAlert(box);
             };
 
+            // Play
             audio.play().catch(e => {
-                console.error("Autoplay blocked or error:", e);
+                console.error("Playback error:", e);
                 finishAlert(box);
             });
         }
