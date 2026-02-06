@@ -49,13 +49,12 @@
     </div>
 
     <script>
-        var socket = io(); var queue = []; var isPlaying = false;
-        var availableVoices = [];
+        var socket = io(); 
+        var queue = []; 
+        var isPlaying = false;
 
-        function loadVoices() { availableVoices = window.speechSynthesis.getVoices(); }
-        window.speechSynthesis.onvoiceschanged = loadVoices;
-        loadVoices(); 
-
+        // We don't need loadVoices anymore because we are fetching audio files now
+        
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
         if (!uuid) uuid = pathParts[pathParts.length - 2];
@@ -73,42 +72,52 @@
 
         function showAlert(data) {
             var senderName = data.tipper || "Anonymous";
+            // Update Text
             document.getElementById('sender').innerText = senderName;
             document.getElementById('amount').innerText = "₹" + data.amount;
             document.getElementById('message-text').innerText = `"${data.message}"`;
             
+            // Show Box
             var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            if (window.speechSynthesis) {
-                window.speechSynthesis.cancel();
-                
-                // --- CHANGED HERE: Removed the regex that stripped special chars/emojis ---
-                // We now use the raw message so the browser reads emojis (e.g. "Red Heart")
-                var messageToSpeak = data.message; 
-                
-                var utter = new SpeechSynthesisUtterance(`${senderName} sent ${data.amount} rupees. ${messageToSpeak}`);
-                
-                // Detect Hindi characters to switch voice accent
-                var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
-                var targetVoice = null;
+            // --- THE NEW AUDIO LOGIC (OBS FRIENDLY) ---
+            
+            // 1. Prepare the text
+            var fullText = `${senderName} sent ${data.amount} rupees. ${data.message}`;
+            
+            // 2. Detect Language (Simple Check)
+            var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
+            var lang = hasHindiScript ? 'hi' : 'en'; // 'hi' for Hindi, 'en' for English
+            
+            // 3. Create the Google Translate TTS URL
+            // Note: We limit text to 200 chars to avoid API errors on this free hack
+            var safeText = encodeURIComponent(fullText.substring(0, 200)); 
+            var audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${safeText}`;
 
-                if (hasHindiScript) {
-                    utter.lang = 'hi-IN'; 
-                    targetVoice = availableVoices.find(v => v.name.includes('Hemant')) || availableVoices.find(v => v.lang.includes('hi'));
-                } else {
-                    utter.lang = 'en-IN'; 
-                    targetVoice = availableVoices.find(v => v.name.includes('Ravi')) || availableVoices.find(v => v.lang.includes('en-IN'));
-                }
-                if (targetVoice) utter.voice = targetVoice;
+            // 4. Play it as an Audio Object (This is what OBS can hear!)
+            var audio = new Audio(audioUrl);
+            
+            audio.onended = () => finishAlert(box);
+            audio.onerror = () => {
+                console.error("Audio failed to load.");
+                finishAlert(box); // Close anyway if audio fails
+            };
 
-                utter.onend = () => finishAlert(box);
-                utter.onerror = () => finishAlert(box);
-                window.speechSynthesis.speak(utter);
-            } else { setTimeout(() => finishAlert(box), 4000); }
+            audio.play().catch(e => {
+                console.error("Autoplay blocked or error:", e);
+                finishAlert(box);
+            });
         }
+
         function finishAlert(box) {
-            setTimeout(() => { box.classList.remove('show'); setTimeout(() => { isPlaying = false; processQueue(); }, 1000); }, 2000);
+            setTimeout(() => { 
+                box.classList.remove('show'); 
+                setTimeout(() => { 
+                    isPlaying = false; 
+                    processQueue(); 
+                }, 1000); 
+            }, 2000);
         }
     </script>
 </body>
