@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer">
     <title>basicgamerz Overlay</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
@@ -139,8 +140,6 @@
         var queue = []; 
         var isPlaying = false;
 
-        // We don't need loadVoices anymore because we are fetching audio files now
-        
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
         if (!uuid) uuid = pathParts[pathParts.length - 2];
@@ -158,41 +157,47 @@
 
         function showAlert(data) {
             var senderName = data.tipper || "Anonymous";
+            var messageText = data.message || "Thank you for the support!";
+
             // Update Text
             document.getElementById('sender').innerText = senderName;
             document.getElementById('amount').innerText = "₹" + data.amount;
-            document.getElementById('message-text').innerText = `"${data.message}"`;
+            document.getElementById('message-text').innerText = `"${messageText}"`;
             
             // Show Box
             var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // --- THE NEW AUDIO LOGIC (OBS FRIENDLY) ---
+            // --- FIXED TTS LOGIC ---
             
-            // 1. Prepare the text
-            var fullText = `${senderName} sent ${data.amount} rupees. ${data.message}`;
+            // 1. Prepare Text
+            var fullText = `${senderName} sent ${data.amount} rupees. ${messageText}`;
             
-            // 2. Detect Language (Simple Check)
-            var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
-            var lang = hasHindiScript ? 'hi' : 'en'; // 'hi' for Hindi, 'en' for English
+            // 2. Detect Language
+            var hasHindiScript = /[\u0900-\u097F]/.test(fullText);
+            var lang = hasHindiScript ? 'hi' : 'en'; 
             
-            // 3. Create the Google Translate TTS URL
-            // Note: We limit text to 200 chars to avoid API errors on this free hack
+            // 3. Robust URL Generation (Prevents 403 Errors)
             var safeText = encodeURIComponent(fullText.substring(0, 200)); 
-            var audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${safeText}`;
+            // Added 'idx', 'total', 'textlen' to make it look like a real browser request
+            var audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${safeText}&tl=${lang}&total=1&idx=0&textlen=${safeText.length}&client=tw-ob&prev=input&ttsspeed=1`;
 
-            // 4. Play it as an Audio Object (This is what OBS can hear!)
             var audio = new Audio(audioUrl);
             
+            // 4. Events
             audio.onended = () => finishAlert(box);
+            
+            // Safety: If audio fails/blocks, close box after 5s anyway
             audio.onerror = () => {
-                console.error("Audio failed to load.");
-                finishAlert(box); // Close anyway if audio fails
+                console.error("Audio failed to load (Check OBS/Network)");
+                setTimeout(() => finishAlert(box), 5000); 
             };
 
+            // Play
             audio.play().catch(e => {
-                console.error("Autoplay blocked or error:", e);
-                finishAlert(box);
+                console.error("Autoplay blocked:", e);
+                // If blocked, wait 5s then close
+                setTimeout(() => finishAlert(box), 5000);
             });
         }
 
@@ -208,5 +213,3 @@
     </script>
 </body>
 </html>
-
-
