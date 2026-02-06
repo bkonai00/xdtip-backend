@@ -301,31 +301,25 @@ app.get('/overlay/:token', async (req, res) => {
 });
 
 // M. TEST ALERT
+// MODIFIED TEST ALERT (Supports Replay)
 app.post('/test-alert', authenticateToken, (req, res) => {
     const username = req.user.username;
-    const fakeTip = {
-        tipper: "Test Bot",
-        amount: 69,
-        message: "This is a test alert! 🔥"
-    };
-    io.to(username.toLowerCase()).emit('new-tip', fakeTip);
-    res.json({ success: true, message: "Test Alert Sent!" });
-});
-// --- NEW: REPLAY ALERT ENDPOINT ---
-// This allows the dashboard to replay a specific tip without saving it to DB
-app.post('/replay-alert', authenticateToken, (req, res) => {
+    
+    // 1. Check if the dashboard sent specific data (for Replay)
     const { tipper, amount, message } = req.body;
-    const username = req.user.username;
 
-    // Send to Overlay (Room = username in lowercase)
-    io.to(username.toLowerCase()).emit('new-tip', {
-        tipper: tipper || "Anonymous",
-        amount: amount || 0,
-        message: message || "Replay"
-    });
+    // 2. Use that data, OR fallback to "Test Bot" if empty
+    const alertData = {
+        tipper: tipper || "Test Bot",
+        amount: amount || 69,
+        message: message || "This is a test alert! 🔥"
+    };
 
-    console.log(`Replayed tip for ${username}: ${tipper} - ${amount}`);
-    res.json({ success: true, message: "Replay Sent!" });
+    // 3. Send to Overlay (Does NOT save to history database)
+    io.to(username.toLowerCase()).emit('new-tip', alertData);
+    
+    console.log(`Alert sent for ${username}: ${alertData.tipper}`);
+    res.json({ success: true, message: "Alert Sent!" });
 });
 
 // J. Request Withdrawal
@@ -540,6 +534,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
 
 
 
