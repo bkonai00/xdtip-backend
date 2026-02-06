@@ -68,40 +68,43 @@
 
         function showAlert(data) {
             var senderName = data.tipper || "Anonymous";
+            var messageText = data.message || "Thank you for the support!";
+            
+            // Update UI
             document.getElementById('sender').innerText = senderName;
             document.getElementById('amount').innerText = "₹" + data.amount;
-            document.getElementById('message-text').innerText = `"${data.message}"`;
+            document.getElementById('message-text').innerText = `"${messageText}"`;
             
             var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // --- USE STREAMELEMENTS API (Works in OBS Mixer) ---
-            var messageToSpeak = `${senderName} sent ${data.amount} rupees. ${data.message}`;
+            // --- GOOGLE TRANSLATE TTS LOGIC (OBS SAFE) ---
+            var fullText = `${senderName} sent ${data.amount} rupees. ${messageText}`;
             
-            // Check for Hindi Characters
-            var hasHindiScript = /[\u0900-\u097F]/.test(data.message);
-            
-            // Select Voice: 'Aditi' for Hindi, 'Brian' for English
-            var voiceName = hasHindiScript ? 'Aditi' : 'Brian'; 
-            
-            var encodedText = encodeURIComponent(messageToSpeak);
-            var audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${voiceName}&text=${encodedText}`;
+            // 1. Detect Language (Simple check for Hindi characters)
+            var hasHindiScript = /[\u0900-\u097F]/.test(fullText);
+            var lang = hasHindiScript ? 'hi' : 'en';
+
+            // 2. Build URL (Uses public Google API)
+            // We slice text to 200 chars to prevent API errors
+            var safeText = encodeURIComponent(fullText.substring(0, 200)); 
+            var audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${safeText}`;
 
             var audio = new Audio(audioUrl);
             
             // Cleanup when audio finishes
             audio.onended = () => finishAlert(box);
             
-            // Handle errors (if API fails, close box anyway)
+            // Safety: If audio fails to load, close the box anyway after 4 seconds
             audio.onerror = () => {
-                console.log("Audio Error");
-                finishAlert(box);
+                console.error("Audio Failed to Load");
+                setTimeout(() => finishAlert(box), 4000);
             };
 
-            // Play
+            // Play Audio
             audio.play().catch(e => {
-                console.error("Playback error:", e);
-                finishAlert(box);
+                console.error("Autoplay Blocked by Browser/OBS:", e);
+                setTimeout(() => finishAlert(box), 4000);
             });
         }
 
