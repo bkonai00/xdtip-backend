@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>VIP Gold Stats</title>
+    <title>VIP Gold Stats - Animated</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
@@ -15,64 +15,94 @@
         }
 
         #vip-container {
-            width: 600px; /* Wider to fit names */
+            width: 550px; 
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 15px;
         }
 
-        /* --- THE BAR DESIGN --- */
+        /* --- THE ANIMATED BAR CONTAINER --- */
         .stat-bar {
+            position: relative;
+            height: 60px;
             background: #000;
-            border: 2px solid #A9A9A9; /* grey Border */
-            border-radius: 8px; /* Slightly rounded corners like image */
-            padding: 5px 20px;
+            border-radius: 10px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding: 0 20px;
             color: white;
-            box-shadow: 0 0 15px rgba(255, 215, 0, 0.2); /* Gold Glow */
-            height: 50px;
-            position: relative;
-            overflow: hidden;
+            overflow: hidden; /* Clips the rotating border */
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
         }
 
-        /* Glossy Shine Effect */
-        .stat-bar::after {
-            content: "";
+        /* --- THE CIRCULAR BORDER ANIMATION --- */
+        /* This creates the grey "snake" rotating around the edge */
+        .stat-bar::before {
+            content: '';
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 50%;
-            background: linear-gradient(to bottom, rgba(255,255,255,0.1), transparent);
-            pointer-events: none;
+            width: 150%;  /* Extra wide to cover corners while rotating */
+            height: 400%; /* Extra tall to cover corners while rotating */
+            background: conic-gradient(
+                transparent, 
+                transparent, 
+                transparent, 
+                #A9A9A9 /* Grey Color */
+            );
+            animation: rotateBorder 4s linear infinite;
+            top: -150%;
+            left: -25%;
         }
 
-        /* --- LEFT TEXT (Labels) --- */
+        /* The "Inner" box that covers the rotating gradient to create a thin border look */
+        .stat-bar::after {
+            content: '';
+            position: absolute;
+            inset: 3px; /* This controls border thickness (3px) */
+            background: #0d0d0d; /* Dark background color */
+            border-radius: 8px;
+            z-index: 0;
+        }
+
+        @keyframes rotateBorder {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* --- CONTENT WRAPPER --- */
+        /* Higher z-index to stay above the border layers */
+        .bar-content {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            width: 100%;
+            justify-content: space-between;
+            align-items: center;
+        }
+
         .label-text {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 700;
-            color: #fff;
+            color: #A9A9A9; /* Grey Label */
             text-transform: uppercase;
         }
 
-        /* --- RIGHT TEXT (Values) --- */
         .value-text {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 900;
-            color: #39FF14; /* Gold Color */
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            color: #39FF14; /* Neon Green / Gold */
+            text-shadow: 0 0 10px rgba(57, 255, 20, 0.4);
             text-transform: uppercase;
-            letter-spacing: 1px;
         }
 
-        /* Crown for Top Tipper */
-        .crown { font-size: 24px; margin-left: 10px; vertical-align: middle; }
+        .crown { font-size: 22px; margin-left: 8px; }
 
-        /* Animation Classes */
+        /* Animation Classes for text rotation */
         .fade-in { animation: fadeIn 0.5s forwards; }
         .fade-out { animation: fadeOut 0.5s forwards; }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-10px); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes fadeOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-10px); } }
 
     </style>
 </head>
@@ -81,16 +111,20 @@
     <div id="vip-container">
         
         <div class="stat-bar">
-            <span class="label-text">#1 XDTIPPER</span>
-            <div>
-                <span id="top-one-name" class="value-text">LOADING...</span>
-                <span class="crown">👑</span>
+            <div class="bar-content">
+                <span class="label-text">#1 XDTIPPER</span>
+                <div>
+                    <span id="top-one-name" class="value-text">LOADING...</span>
+                    <span class="crown">👑</span>
+                </div>
             </div>
         </div>
 
         <div class="stat-bar">
-            <span class="label-text">!XDTIP</span>
-            <span id="rotating-text" class="value-text">WAITING...</span>
+            <div class="bar-content">
+                <span class="label-text">TOP TIPS</span>
+                <span id="rotating-text" class="value-text">WAITING...</span>
+            </div>
         </div>
 
     </div>
@@ -100,17 +134,14 @@
         var topTippers = [];
         var currentIndex = 0;
         
-        // 1. Get Token from URL
         var pathParts = window.location.pathname.split('/');
         var uuid = pathParts[pathParts.length - 1]; 
 
-        // 2. Connect
         if (uuid) {
             socket.emit('join-overlay', uuid);
             fetchStats();
         }
 
-        // 3. Fetch Data from Server
         async function fetchStats() {
             try {
                 const res = await fetch(`/stats/${uuid}`);
@@ -120,60 +151,39 @@
             } catch(e) { console.error("Stats Error:", e); }
         }
 
-        // 4. Update the UI
         function updateDisplay() {
-            // Safety Check: If no data
             if (!topTippers || topTippers.length === 0) {
-                document.getElementById('top-one-name').innerText = "NO ONE YET";
+                document.getElementById('top-one-name').innerText = "NO DATA";
                 document.getElementById('rotating-text').innerText = "BE THE FIRST!";
                 return;
             }
 
-            // A. SET TOP BAR (Fixed #1)
-            // Shows: "NAME - ₹AMOUNT"
             var numberOne = topTippers[0];
-            var topText = `${numberOne.sender_name} - ₹${numberOne.amount}`;
-            document.getElementById('top-one-name').innerText = topText;
+            document.getElementById('top-one-name').innerText = `${numberOne.sender_name} - ₹${numberOne.amount}`;
 
-            // B. START BOTTOM BAR ROTATION
-            // Ensure we don't start multiple intervals
             if (window.rotatorInterval) clearInterval(window.rotatorInterval);
-            
-            rotateBottomBar(); // Run once immediately
-            window.rotatorInterval = setInterval(rotateBottomBar, 3000); // Rotate every 3s
+            rotateBottomBar();
+            window.rotatorInterval = setInterval(rotateBottomBar, 4000); 
         }
 
-        // 5. Rotation Logic
         function rotateBottomBar() {
             if (topTippers.length === 0) return;
-
             var el = document.getElementById('rotating-text');
             
-            // Fade Out
             el.classList.remove('fade-in');
             el.classList.add('fade-out');
 
             setTimeout(() => {
-                // Change Text
                 var tipper = topTippers[currentIndex];
                 el.innerText = `${tipper.sender_name} - ₹${tipper.amount}`;
-                
-                // Fade In
                 el.classList.remove('fade-out');
                 el.classList.add('fade-in');
 
-                // Move to next person
-                currentIndex++;
-                if (currentIndex >= topTippers.length) currentIndex = 0;
-
-            }, 500); // 0.5s wait for fade out
+                currentIndex = (currentIndex + 1) % topTippers.length;
+            }, 500);
         }
 
-        // 6. Listen for New Tips
-        socket.on('new-tip', () => {
-            fetchStats(); // Refresh data instantly
-        });
-
+        socket.on('new-tip', () => fetchStats());
     </script>
 </body>
 </html>
