@@ -8,10 +8,10 @@
     <style>
         /* --- FONT SETUP --- */
         @font-face {
-            font-family: 'Knocky';
-            src: url('Knocky-SemiBold.woff2') format('woff2'),
-                 url('Knocky-SemiBold.ttf') format('truetype');
-            font-weight: 600;
+            font-family: 'Conthey';
+            src: url('Conthey-Medium-Nar-3.woff2') format('woff2'),
+                 url('Conthey-Medium-Nar-3.ttf') format('truetype');
+            font-weight: 500;
             font-style: normal;
         }
         
@@ -23,7 +23,7 @@
             display: flex; 
             align-items: center; 
             justify-content: center; 
-            font-family: 'Knocky', sans-serif;
+            font-family: 'Conthey', sans-serif; /* Applied new font */
         }
         
         /* --- LAYOUT CONTAINER --- */
@@ -32,16 +32,11 @@
             opacity: 0; 
             transform: scale(0.9); 
             transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
-            
-            /* TRANSPARENT BACKGROUND - NO BOX */
             background: transparent;
             padding: 20px; 
             min-width: 500px;
-            
-            /* No Border around the container */
             border: none;
             box-shadow: none;
-            
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -49,76 +44,62 @@
         
         #alert-box.show { opacity: 1; transform: scale(1); }
         
-        /* --- GIF STYLE (Full, No Round Border) --- */
-        .alert-image { 
-            /* Adjustable size - keeps aspect ratio */
-            height: 150px; 
+        .alert-video { 
+            height: 250px; 
             width: auto; 
-            
-            /* REMOVED CIRCLE & BORDER */
-            border-radius: 0; 
-            border: none;
-            
-            /* Shadow to make the GIF pop */
-            filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));
-            
+            filter: drop-shadow(0 0 15px rgba(212, 175, 55, 0.3)); /* Subtle Gold Glow */
             margin-bottom: 10px;
-            object-fit: contain; /* Shows full image */
+            object-fit: contain;
         }
 
-        /* --- TYPOGRAPHY --- */
-.alert-text { 
-    font-size: 32px; 
-    color: #fff; 
-    
-    /* MOVE TEXT UP: Adjust -50px to your liking */
-    margin-top: -200px; 
-    
-    position: relative; /* Ensures it layers correctly */
-    z-index: 2;         /* Keeps text on top of the video */
-    
-    text-transform: uppercase; 
-    letter-spacing: 1px;
-    text-shadow: 2px 2px 4px #000, 0 0 10px rgba(0,0,0,0.8);
-}
+        /* --- TYPOGRAPHY (All Golden) --- */
+        .alert-text { 
+            font-size: 32px; 
+            color: #FFD700; /* Gold */
+            margin-top: -200px; 
+            position: relative;
+            z-index: 2; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+            /* Gold Shadow */
+            text-shadow: 2px 2px 4px #000, 0 0 10px rgba(212, 175, 55, 0.6);
+        }
         
-        /* 1. USER: Neon Red */
+        /* 1. USER: Golden */
         #sender { 
-            color: #FF0039; 
-            font-size: 48px;
+            color: #FFD700; 
+            font-size: 52px;
             display: block;
             margin-bottom: 0px;
-            /* Neon Glow + Black Outline */
-            text-shadow: 0 0 20px #FF0039, 3px 3px 0 #000;
+            /* Golden Glow + Black Outline */
+            text-shadow: 0 0 25px #D4AF37, 3px 3px 0 #000;
         } 
         
-        /* Helper Text */
+        /* Helper Text: Light Gold */
         .sub-text {
-            font-size: 20px;
-            color: #ddd;
+            font-size: 22px;
+            color: #FFFACD; 
             vertical-align: middle;
             margin: 0 10px;
             text-shadow: 2px 2px 0 #000;
         }
         
-        /* 2. AMOUNT: Bright Green */
+        /* 2. AMOUNT: Bright Gold */
         #amount { 
-            color: #00FF00; 
-            font-size: 55px; 
+            color: #FFD700; 
+            font-size: 60px; 
             display: inline-block;
-            /* Neon Glow + Black Outline */
-            text-shadow: 0 0 20px #00FF00, 3px 3px 0 #000;
+            text-shadow: 0 0 25px #FFD700, 3px 3px 0 #000;
         }
         
-        /* 3. MESSAGE: Bright White */
+        /* 3. MESSAGE: Golden White */
         .message { 
-            font-size: 28px; 
-            color: #FFFFFF; 
+            font-size: 30px; 
+            color: #FFFACD; 
             margin-top: 15px; 
             font-weight: normal; 
-            /* Heavy Shadow for visibility */
-            text-shadow: 2px 2px 4px #000, 0 0 10px #000;
-            max-width: 600px;
+            text-shadow: 2px 2px 4px #000, 0 0 12px rgba(212, 175, 55, 0.5);
+            max-width: 650px;
             line-height: 1.4;
         }
 
@@ -134,7 +115,7 @@
         <div class="alert-text">
             <span id="sender">USER</span>
             <div>
-                <span class="sub-text">Send</span>
+                <span class="sub-text">Sent</span>
                 <span id="amount">₹500</span>
             </div>
         </div>
@@ -166,44 +147,26 @@
             var senderName = data.tipper || "Anonymous";
             var messageText = data.message || "Thank you for the support!";
 
-            // Update Text
             document.getElementById('sender').innerText = senderName;
             document.getElementById('amount').innerText = "₹" + data.amount;
             document.getElementById('message-text').innerText = `"${messageText}"`;
             
-            // Show Box
             var box = document.getElementById('alert-box');
             box.classList.add('show');
 
-            // --- FIXED TTS LOGIC ---
-            
-            // 1. Prepare Text
+            // --- TTS LOGIC ---
             var fullText = `${senderName} sent ${data.amount} rupees. ${messageText}`;
-            
-            // 2. Detect Language
             var hasHindiScript = /[\u0900-\u097F]/.test(fullText);
             var lang = hasHindiScript ? 'hi' : 'en'; 
             
-            // 3. Robust URL Generation (Prevents 403 Errors)
             var safeText = encodeURIComponent(fullText.substring(0, 200)); 
-            // Added 'idx', 'total', 'textlen' to make it look like a real browser request
             var audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${safeText}&tl=${lang}&total=1&idx=0&textlen=${safeText.length}&client=tw-ob&prev=input&ttsspeed=1`;
 
             var audio = new Audio(audioUrl);
-            
-            // 4. Events
             audio.onended = () => finishAlert(box);
-            
-            // Safety: If audio fails/blocks, close box after 5s anyway
-            audio.onerror = () => {
-                console.error("Audio failed to load (Check OBS/Network)");
-                setTimeout(() => finishAlert(box), 5000); 
-            };
+            audio.onerror = () => setTimeout(() => finishAlert(box), 5000); 
 
-            // Play
             audio.play().catch(e => {
-                console.error("Autoplay blocked:", e);
-                // If blocked, wait 5s then close
                 setTimeout(() => finishAlert(box), 5000);
             });
         }
@@ -220,4 +183,3 @@
     </script>
 </body>
 </html>
-
