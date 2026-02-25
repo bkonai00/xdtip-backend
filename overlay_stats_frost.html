@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>VIP Gold Stats - Animated</title>
+    <title>VIP Gold Stats - Animated Border</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
@@ -15,65 +15,64 @@
         }
 
         #vip-container {
-            width: 550px; 
+            width: 580px; 
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
 
-        /* --- THE ANIMATED BAR CONTAINER --- */
+        /* --- THE ANIMATED BORDER BAR --- */
         .stat-bar {
             position: relative;
-            height: 60px;
-            background: #000;
+            height: 55px;
+            background: rgba(0, 0, 0, 0.9);
             border-radius: 10px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
             padding: 0 20px;
-            color: white;
-            overflow: hidden; /* Clips the rotating border */
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            overflow: hidden; /* This clips the rotating light to the edges */
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
         }
 
-        /* --- THE CIRCULAR BORDER ANIMATION --- */
-        /* This creates the grey "snake" rotating around the edge */
+        /* The Moving Circular Border (The "Snake" Effect) */
         .stat-bar::before {
             content: '';
             position: absolute;
-            width: 150%;  /* Extra wide to cover corners while rotating */
-            height: 400%; /* Extra tall to cover corners while rotating */
+            width: 150%;
+            height: 400%; /* Height ensures it covers the wide bar while rotating */
             background: conic-gradient(
                 transparent, 
                 transparent, 
                 transparent, 
-                #A9A9A9 /* Grey Color */
+                #A9A9A9, /* Grey color light */
+                #FFFFFF, /* Bright white highlight */
+                #A9A9A9  /* Back to grey */
             );
             animation: rotateBorder 4s linear infinite;
             top: -150%;
             left: -25%;
         }
 
-        /* The "Inner" box that covers the rotating gradient to create a thin border look */
+        /* The Inner Face (Masks the center so only the edge looks like a border) */
         .stat-bar::after {
             content: '';
             position: absolute;
-            inset: 3px; /* This controls border thickness (3px) */
-            background: #0d0d0d; /* Dark background color */
+            inset: 3px; /* Controls border thickness */
+            background: #000;
             border-radius: 8px;
-            z-index: 0;
+            z-index: 1;
         }
 
+        /* Border Rotation Animation */
         @keyframes rotateBorder {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
 
         /* --- CONTENT WRAPPER --- */
-        /* Higher z-index to stay above the border layers */
         .bar-content {
             position: relative;
-            z-index: 10;
+            z-index: 10; /* Keeps text above the animated border */
             display: flex;
             width: 100%;
             justify-content: space-between;
@@ -83,26 +82,37 @@
         .label-text {
             font-size: 18px;
             font-weight: 700;
-            color: #A9A9A9; /* Grey Label */
+            color: #A9A9A9; /* Grey */
             text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .value-text {
             font-size: 22px;
             font-weight: 900;
-            color: #39FF14; /* Neon Green / Gold */
-            text-shadow: 0 0 10px rgba(57, 255, 20, 0.4);
+            color: #39FF14; /* Neon Green */
+            text-shadow: 0 0 10px rgba(57, 255, 20, 0.5);
             text-transform: uppercase;
         }
 
         .crown { font-size: 22px; margin-left: 8px; }
 
-        /* Animation Classes for text rotation */
-        .fade-in { animation: fadeIn 0.5s forwards; }
-        .fade-out { animation: fadeOut 0.5s forwards; }
+        /* Glossy Highlight on top of bar */
+        .gloss {
+            position: absolute;
+            top: 3px; left: 8px; right: 8px; height: 40%;
+            background: linear-gradient(to bottom, rgba(255,255,255,0.1), transparent);
+            border-radius: 5px;
+            z-index: 2;
+            pointer-events: none;
+        }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
-        @keyframes fadeOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-10px); } }
+        /* Text Rotation Animations */
+        .fade-in { animation: fadeIn 0.6s ease-out forwards; }
+        .fade-out { animation: fadeOut 0.6s ease-in forwards; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-10px); } }
 
     </style>
 </head>
@@ -111,6 +121,7 @@
     <div id="vip-container">
         
         <div class="stat-bar">
+            <div class="gloss"></div>
             <div class="bar-content">
                 <span class="label-text">#1 XDTIPPER</span>
                 <div>
@@ -121,8 +132,9 @@
         </div>
 
         <div class="stat-bar">
+            <div class="gloss"></div>
             <div class="bar-content">
-                <span class="label-text">TOP TIPS</span>
+                <span class="label-text">RECENT TIPS</span>
                 <span id="rotating-text" class="value-text">WAITING...</span>
             </div>
         </div>
@@ -180,7 +192,7 @@
                 el.classList.add('fade-in');
 
                 currentIndex = (currentIndex + 1) % topTippers.length;
-            }, 500);
+            }, 600);
         }
 
         socket.on('new-tip', () => fetchStats());
